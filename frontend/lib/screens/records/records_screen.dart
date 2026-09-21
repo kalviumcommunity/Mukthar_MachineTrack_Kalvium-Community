@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/routes.dart';
 import '../../app/theme.dart';
 import '../../widgets/record_card.dart';
 
@@ -16,6 +17,17 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
   final List<Map<String, String>> _allRecords = const [
     {
+      'id': 'INS-2026-0812',
+      'title': 'Shift Start Checklist Passed',
+      'machineName': 'CNC Lathe Machine #02',
+      'recordType': 'Inspection',
+      'status': 'Passed',
+      'timestamp': '08:30 AM Today',
+      'description':
+          'Coolant levels checked, safety guards aligned, emergency stop verified.',
+      'reportedBy': 'Abhinav',
+    },
+    {
       'id': 'rec-101',
       'title': 'Hydraulic Fluid Pressure Drop',
       'machineName': 'Hydraulic Press 500T',
@@ -27,15 +39,15 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       'reportedBy': 'Mukthar',
     },
     {
-      'id': 'rec-102',
-      'title': 'Shift Start Checklist Passed',
-      'machineName': 'CNC Lathe Machine #02',
+      'id': 'INS-2026-0810',
+      'title': 'Weekly Safety System Verification',
+      'machineName': 'Robotic Welding Arm Alpha',
       'recordType': 'Inspection',
       'status': 'Passed',
-      'timestamp': '08:30 AM Today',
+      'timestamp': '15 Sep 2026',
       'description':
-          'Coolant levels checked, safety guards aligned, emergency stop verified.',
-      'reportedBy': 'Abhinav',
+          'Laser curtains, interlock switches, and manual override tested without issues.',
+      'reportedBy': 'Mukthar',
     },
     {
       'id': 'rec-103',
@@ -47,17 +59,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       'description':
           'Belt tension loose on section 3 resulting in package jams. Scheduled for maintenance.',
       'reportedBy': 'Steve',
-    },
-    {
-      'id': 'rec-104',
-      'title': 'Weekly Safety System Verification',
-      'machineName': 'Robotic Welding Arm Alpha',
-      'recordType': 'Inspection',
-      'status': 'Passed',
-      'timestamp': '15 Sep 2026',
-      'description':
-          'Laser curtains, interlock switches, and manual override tested without issues.',
-      'reportedBy': 'Mukthar',
     },
     {
       'id': 'rec-105',
@@ -122,6 +123,15 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_task_rounded, size: 20),
+        label: const Text('Log Inspection', style: TextStyle(fontWeight: FontWeight.w700)),
+        onPressed: () {
+          Navigator.pushNamed(context, AppRoutes.newInspection);
+        },
+      ),
       body: SafeArea(
         child: TabBarView(
           controller: _tabController,
@@ -180,7 +190,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       onRefresh: _refreshRecords,
       color: AppTheme.primaryBlue,
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
         itemCount: records.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
@@ -194,11 +204,30 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
             description: item['description']!,
             reportedBy: item['reportedBy']!,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Record detail modal for ${item['title']}'),
-                ),
-              );
+              if (item['recordType'] == 'Inspection') {
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.inspectionDetails,
+                  arguments: {
+                    'id': item['id'] ?? 'INS-2026-0812',
+                    'machineName': item['machineName'],
+                    'machineCode': 'M-00${index + 1}',
+                    'machineLocation': 'Plant Floor A',
+                    'date': item['timestamp'],
+                    'time': '08:30 AM',
+                    'condition': item['status'],
+                    'notes': item['description'],
+                    'reportedBy': '${item['reportedBy']} (Inspector)',
+                    'shift': 'Shift #1',
+                  },
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Breakdown incident log: ${item['title']}'),
+                  ),
+                );
+              }
             },
           );
         },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/routes.dart';
 import '../../app/theme.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/record_card.dart';
@@ -195,10 +196,17 @@ class MachineDetailsScreen extends StatelessWidget {
                       text: 'Log Inspection',
                       icon: Icons.add_task_rounded,
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Log inspection trigger for this machine'),
-                          ),
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.newInspection,
+                          arguments: machineData ?? {
+                            'id': '1',
+                            'name': name,
+                            'code': code,
+                            'location': location,
+                            'status': status,
+                            'model': model,
+                          },
                         );
                       },
                     ),
@@ -252,6 +260,24 @@ class MachineDetailsScreen extends StatelessWidget {
                 timestamp: '3 Days Ago',
                 description: 'Full hydraulic check, oil topped up, filter cleaned.',
                 reportedBy: 'Steve',
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.inspectionDetails,
+                    arguments: {
+                      'id': 'INS-2026-0811',
+                      'machineName': name,
+                      'machineCode': code,
+                      'machineLocation': location,
+                      'date': '19 Sep 2026',
+                      'time': '09:15 AM',
+                      'condition': 'Passed',
+                      'notes': 'Full hydraulic check, oil topped up, filter cleaned.',
+                      'reportedBy': 'Steve (Maintenance Tech)',
+                      'shift': 'Shift #2',
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 16),
             ],
