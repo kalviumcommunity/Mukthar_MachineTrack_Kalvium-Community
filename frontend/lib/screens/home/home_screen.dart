@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/routes.dart';
 import '../../app/theme.dart';
 import '../../widgets/machine_card.dart';
 import '../../widgets/record_card.dart';
@@ -77,7 +78,24 @@ class HomeScreen extends StatelessWidget {
                 description:
                     'Coolant levels checked, safety guards aligned, emergency stop verified.',
                 reportedBy: 'Abhinav',
-                onTap: () => onNavigateToTab?.call(2),
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.inspectionDetails,
+                    arguments: {
+                      'id': 'INS-2026-0812',
+                      'machineName': 'CNC Lathe Machine #02',
+                      'machineCode': 'CNC-LTH-02',
+                      'machineLocation': 'Zone B - Machining Cell',
+                      'date': '22 Sep 2026',
+                      'time': '08:30 AM',
+                      'condition': 'Passed',
+                      'notes': 'Coolant levels checked, safety guards aligned, emergency stop verified.',
+                      'reportedBy': 'Abhinav (Operator)',
+                      'shift': 'Shift #1',
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 16),
             ],
@@ -257,11 +275,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: InkWell(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Record Inspection form enabled in frontend integration!'),
-                ),
-              );
+              Navigator.pushNamed(context, AppRoutes.newInspection);
             },
             borderRadius: BorderRadius.circular(14),
             child: Container(
