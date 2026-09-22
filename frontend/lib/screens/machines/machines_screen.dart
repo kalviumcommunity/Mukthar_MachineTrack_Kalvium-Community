@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../widgets/custom_button.dart';
 import '../../widgets/machine_card.dart';
 
-/// Machines Screen displaying factory machine inventory with status filtering.
+/// Machines Screen displaying factory machine inventory with combined search, status filtering, and sorting.
 class MachinesScreen extends StatefulWidget {
   const MachinesScreen({super.key});
 
@@ -13,7 +14,10 @@ class MachinesScreen extends StatefulWidget {
 
 class _MachinesScreenState extends State<MachinesScreen> {
   String _selectedFilter = 'All';
+  String _selectedZone = 'All Zones';
+  String _sortBy = 'Name';
   String _searchQuery = '';
+  bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
 
   // Sample Static Machine Dataset
@@ -81,15 +85,259 @@ class _MachinesScreenState extends State<MachinesScreen> {
     super.dispose();
   }
 
+  Future<void> _refreshMachines() async {
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _resetSearchAndFilters() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _selectedFilter = 'All';
+      _selectedZone = 'All Zones';
+      _sortBy = 'Name';
+    });
+  }
+
+  bool get _hasActiveFilters =>
+      _selectedFilter != 'All' ||
+      _selectedZone != 'All Zones' ||
+      _searchQuery.isNotEmpty ||
+      _sortBy != 'Name';
+
   List<Map<String, String>> get _filteredMachines {
-    return _allMachines.where((m) {
-      final matchesFilter = _selectedFilter == 'All' ||
+    final list = _allMachines.where((m) {
+      final matchesStatus = _selectedFilter == 'All' ||
           m['status']!.toLowerCase() == _selectedFilter.toLowerCase();
-      final matchesSearch = m['name']!.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          m['code']!.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          m['location']!.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
+      final matchesZone = _selectedZone == 'All Zones' ||
+          m['location']!.toLowerCase().contains(_selectedZone.toLowerCase().replaceAll('zone ', ''));
+      final query = _searchQuery.toLowerCase();
+      final matchesSearch = query.isEmpty ||
+          m['name']!.toLowerCase().contains(query) ||
+          m['code']!.toLowerCase().contains(query) ||
+          m['location']!.toLowerCase().contains(query) ||
+          (m['assignedTech']?.toLowerCase().contains(query) ?? false);
+      return matchesStatus && matchesZone && matchesSearch;
     }).toList();
+
+    if (_sortBy == 'Status') {
+      list.sort((a, b) => a['status']!.compareTo(b['status']!));
+    } else if (_sortBy == 'Location') {
+      list.sort((a, b) => a['location']!.compareTo(b['location']!));
+    } else {
+      list.sort((a, b) => a['name']!.compareTo(b['name']!));
+    }
+
+    return list;
+  }
+
+  void _openFilterBottomSheet() {
+    String tempFilter = _selectedFilter;
+    String tempZone = _selectedZone;
+    String tempSort = _sortBy;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              decoration: const BoxDecoration(
+                color: AppTheme.surfaceWhite,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle Bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.borderLight,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Title & Reset Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Filter & Sort Machines',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempFilter = 'All';
+                              tempZone = 'All Zones';
+                              tempSort = 'Name';
+                            });
+                          },
+                          child: const Text(
+                            'Reset All',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.secondaryBlue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16, color: AppTheme.borderLight),
+                    const SizedBox(height: 8),
+
+                    // Status Filter Section
+                    const Text(
+                      'Operational Status',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ['All', 'Running', 'Maintenance', 'Breakdown', 'Idle'].map((status) {
+                        final isSelected = tempFilter == status;
+                        return ChoiceChip(
+                          label: Text(status),
+                          selected: isSelected,
+                          selectedColor: AppTheme.primaryBlue,
+                          backgroundColor: AppTheme.backgroundLight,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          ),
+                          side: BorderSide(
+                            color: isSelected ? AppTheme.primaryBlue : AppTheme.borderLight,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => tempFilter = status);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Plant Zone Section
+                    const Text(
+                      'Plant Zone',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ['All Zones', 'Zone A', 'Zone B', 'Zone C', 'Zone D'].map((zone) {
+                        final isSelected = tempZone == zone;
+                        return ChoiceChip(
+                          label: Text(zone),
+                          selected: isSelected,
+                          selectedColor: AppTheme.secondaryBlue,
+                          backgroundColor: AppTheme.backgroundLight,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          ),
+                          side: BorderSide(
+                            color: isSelected ? AppTheme.secondaryBlue : AppTheme.borderLight,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => tempZone = zone);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Sort By Section
+                    const Text(
+                      'Sort Order',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: ['Name', 'Status', 'Location'].map((sort) {
+                        final isSelected = tempSort == sort;
+                        return ChoiceChip(
+                          label: Text('By $sort'),
+                          selected: isSelected,
+                          selectedColor: AppTheme.primaryBlue,
+                          backgroundColor: AppTheme.backgroundLight,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          ),
+                          side: BorderSide(
+                            color: isSelected ? AppTheme.primaryBlue : AppTheme.borderLight,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setModalState(() => tempSort = sort);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Apply Button
+                    CustomButton(
+                      text: 'Apply Filters',
+                      onPressed: () {
+                        setState(() {
+                          _selectedFilter = tempFilter;
+                          _selectedZone = tempZone;
+                          _sortBy = tempSort;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -101,13 +349,27 @@ class _MachinesScreenState extends State<MachinesScreen> {
       appBar: AppBar(
         title: const Text('Factory Machines'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.tune_rounded, size: 22),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Filter settings sheet')),
-              );
-            },
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.tune_rounded, size: 22),
+                tooltip: 'Filter & Sort',
+                onPressed: _openFilterBottomSheet,
+              ),
+              if (_hasActiveFilters)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.secondaryBlue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -116,7 +378,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
           children: [
             // Search Input Field
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
               child: TextField(
                 controller: _searchController,
                 onChanged: (val) {
@@ -146,7 +408,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
             // Status Filter Chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
                 children: ['All', 'Running', 'Maintenance', 'Breakdown', 'Idle'].map((filter) {
                   final isSelected = _selectedFilter == filter;
@@ -175,34 +437,72 @@ class _MachinesScreenState extends State<MachinesScreen> {
                 }).toList(),
               ),
             ),
-            const SizedBox(height: 8),
 
-            // Machine Cards List View
+            // Active Filter & Count Bar
+            if (_hasActiveFilters)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Showing ${filteredList.length} of ${_allMachines.length} machines',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _resetSearchAndFilters,
+                      child: const Text(
+                        'Reset Filters',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.secondaryBlue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 4),
+
+            // Machine Cards List View / Loading / Empty State
             Expanded(
-              child: filteredList.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: filteredList.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final item = filteredList[index];
-                        return MachineCard(
-                          id: item['id']!,
-                          name: item['name']!,
-                          code: item['code']!,
-                          location: item['location']!,
-                          status: item['status']!,
-                          lastInspected: item['lastInspected'],
-                          onTap: () {
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.machineDetails,
-                              arguments: item,
-                            );
-                          },
-                        );
-                      },
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _refreshMachines,
+                      color: AppTheme.primaryBlue,
+                      child: filteredList.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                              itemCount: filteredList.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = filteredList[index];
+                                return MachineCard(
+                                  id: item['id']!,
+                                  name: item['name']!,
+                                  code: item['code']!,
+                                  location: item['location']!,
+                                  status: item['status']!,
+                                  lastInspected: item['lastInspected'],
+                                  onTap: () {
+                                    Navigator.pushNamed(
+                                      context,
+                                      AppRoutes.machineDetails,
+                                      arguments: item,
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                     ),
             ),
           ],
@@ -212,38 +512,59 @@ class _MachinesScreenState extends State<MachinesScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
+    return ListView(
+      padding: const EdgeInsets.all(32.0),
+      children: [
+        const SizedBox(height: 40),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withAlpha(12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
               Icons.search_off_rounded,
-              size: 64,
-              color: AppTheme.textMuted.withAlpha(120),
+              size: 56,
+              color: AppTheme.primaryBlue,
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'No Machines Found',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Try changing your filter selection or search query.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 20),
+        const Text(
+          'No Machines Found',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _searchQuery.isNotEmpty
+              ? 'No machines matched "$_searchQuery". Try checking the name, code, or active status filter.'
+              : 'No machines match the selected status "$_selectedFilter".',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: SizedBox(
+            width: 200,
+            child: CustomButton(
+              text: 'Reset Filters & Search',
+              isOutlined: true,
+              icon: Icons.refresh_rounded,
+              onPressed: _resetSearchAndFilters,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

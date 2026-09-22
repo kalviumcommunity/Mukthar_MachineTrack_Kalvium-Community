@@ -66,7 +66,28 @@ class HomeScreen extends StatelessWidget {
                 description:
                     'Fluid line leak detected near main cylinder valve during morning shift operation.',
                 reportedBy: 'Mukthar (Me)',
-                onTap: () => onNavigateToTab?.call(2),
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.recordDetails,
+                    arguments: {
+                      'id': 'rec-101',
+                      'title': 'Hydraulic Fluid Pressure Drop',
+                      'machineName': 'Hydraulic Press 500T',
+                      'machineCode': 'PRESS-500T-04',
+                      'machineLocation': 'Zone A - Stamping Line',
+                      'recordType': 'Breakdown',
+                      'status': 'Critical',
+                      'timestamp': '10:45 AM Today',
+                      'description':
+                          'Fluid line leak detected near main cylinder valve during morning shift operation.',
+                      'reportedBy': 'Mukthar (Lead Tech)',
+                      'shift': 'Shift #1 • Plant Floor A',
+                      'priority': 'Critical / Line Halt',
+                      'component': 'Main Hydraulic Pump & Valve',
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 12),
               RecordCard(
@@ -319,12 +340,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: InkWell(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Report Breakdown form enabled in frontend integration!'),
-                  backgroundColor: AppTheme.statusBreakdown,
-                ),
-              );
+              Navigator.pushNamed(context, AppRoutes.reportBreakdown);
             },
             borderRadius: BorderRadius.circular(14),
             child: Container(

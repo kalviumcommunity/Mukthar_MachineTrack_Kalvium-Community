@@ -8,6 +8,8 @@ import '../screens/machines/machine_details_screen.dart';
 import '../screens/inspections/new_inspection_screen.dart';
 import '../screens/inspections/inspection_success_screen.dart';
 import '../screens/inspections/inspection_details_screen.dart';
+import '../screens/records/record_details_screen.dart';
+import '../screens/records/report_breakdown_screen.dart';
 
 /// Centralized route definitions and generator for MachineTrack.
 class AppRoutes {
@@ -22,6 +24,8 @@ class AppRoutes {
   static const String newInspection = '/new-inspection';
   static const String inspectionSuccess = '/inspection-success';
   static const String inspectionDetails = '/inspection-details';
+  static const String recordDetails = '/record-details';
+  static const String reportBreakdown = '/report-breakdown';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -54,6 +58,16 @@ class AppRoutes {
         final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
           builder: (_) => InspectionDetailsScreen(inspectionData: args),
+        );
+      case recordDetails:
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => RecordDetailsScreen(recordData: args),
+        );
+      case reportBreakdown:
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => ReportBreakdownScreen(initialMachine: args),
         );
       default:
         return MaterialPageRoute(
