@@ -218,11 +218,17 @@ class MachineDetailsScreen extends StatelessWidget {
                       icon: Icons.warning_amber_rounded,
                       backgroundColor: AppTheme.statusBreakdown,
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Report breakdown trigger for this machine'),
-                            backgroundColor: AppTheme.statusBreakdown,
-                          ),
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.reportBreakdown,
+                          arguments: machineData ?? {
+                            'id': '1',
+                            'name': name,
+                            'code': code,
+                            'location': location,
+                            'status': status,
+                            'model': model,
+                          },
                         );
                       },
                     ),
@@ -250,6 +256,28 @@ class MachineDetailsScreen extends StatelessWidget {
                 description:
                     'Fluid line pressure drop recorded. Main pump valve requires seal replacement.',
                 reportedBy: 'Mukthar',
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.recordDetails,
+                    arguments: {
+                      'id': 'REC-2026-101',
+                      'title': 'Hydraulic Pressure Failure',
+                      'machineName': name,
+                      'machineCode': code,
+                      'machineLocation': location,
+                      'recordType': 'Breakdown',
+                      'status': 'Critical',
+                      'timestamp': '10:45 AM Today',
+                      'description':
+                          'Fluid line pressure drop recorded. Main pump valve requires seal replacement.',
+                      'reportedBy': 'Mukthar (Lead Tech)',
+                      'shift': 'Shift #1 • Plant Floor A',
+                      'priority': 'Critical / Urgent',
+                      'component': 'Main Hydraulic Pump Valve',
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 12),
               RecordCard(
