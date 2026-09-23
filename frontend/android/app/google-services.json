@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "831217477879",
+    "project_id": "machinetrack-701bd",
+    "storage_bucket": "machinetrack-701bd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:831217477879:android:d3d94074ca134a0488cbf2",
+        "android_client_info": {
+          "package_name": "com.machinetrack.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLtpMjLj4ygx9SeHcmxTaoa8lVo-ogYVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
