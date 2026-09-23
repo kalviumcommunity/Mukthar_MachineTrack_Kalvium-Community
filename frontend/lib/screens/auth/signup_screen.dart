@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 
@@ -18,6 +19,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authService = AuthService();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -32,21 +34,37 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _handleSignup() {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+  Future<void> _handleSignup() async {
+    if (_isLoading) return;
+    if (!_formKey.currentState!.validate()) return;
 
-      // Simulate signup delay then navigate to Main App
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            AppRoutes.main,
-            (route) => false,
-          );
-        }
-      });
+    setState(() => _isLoading = true);
+
+    try {
+      await _authService.signUp(
+        email: _emailController.text,
+        password: _passwordController.text,
+        displayName: _nameController.text,
+      );
+
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.main,
+          (route) => false,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: AppTheme.statusBreakdown,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
