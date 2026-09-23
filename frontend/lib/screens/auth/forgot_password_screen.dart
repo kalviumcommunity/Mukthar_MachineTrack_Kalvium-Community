@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 
@@ -14,6 +15,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _authService = AuthService();
 
   bool _isLoading = false;
   bool _emailSent = false;
@@ -24,19 +26,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _handleResetPassword() {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+  Future<void> _handleResetPassword() async {
+    if (_isLoading) return;
+    if (!_formKey.currentState!.validate()) return;
 
-      // Simulate sending password reset email
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _emailSent = true;
-          });
-        }
-      });
+    setState(() => _isLoading = true);
+
+    try {
+      await _authService.sendPasswordResetEmail(
+        email: _emailController.text,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _emailSent = true;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: AppTheme.statusBreakdown,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
