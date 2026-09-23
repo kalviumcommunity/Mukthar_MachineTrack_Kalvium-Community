@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 
 /// Profile & Settings Screen for worker account management.
@@ -24,13 +25,16 @@ class ProfileScreen extends StatelessWidget {
                 backgroundColor: AppTheme.statusBreakdown,
                 minimumSize: const Size(80, 36),
               ),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  AppRoutes.login,
-                  (route) => false,
-                );
+                await AuthService().signOut();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    AppRoutes.login,
+                    (route) => false,
+                  );
+                }
               },
               child: const Text('Logout'),
             ),
@@ -42,6 +46,13 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
+    final displayName = (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
+        ? user.displayName!.trim()
+        : (user?.email?.split('@').first ?? 'Mukthar');
+    final subtitle = user?.email ?? 'Frontend Lead • Kalvium Community';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'M';
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -66,9 +77,9 @@ class ProfileScreen extends StatelessWidget {
                     CircleAvatar(
                       radius: 36,
                       backgroundColor: AppTheme.primaryBlue,
-                      child: const Text(
-                        'M',
-                        style: TextStyle(
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
@@ -76,18 +87,18 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Mukthar',
-                      style: TextStyle(
+                    Text(
+                      displayName,
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Frontend Lead • Kalvium Community',
-                      style: TextStyle(
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w500,
