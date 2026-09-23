@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../services/auth_service.dart';
 
 /// Splash screen displaying MachineTrack app branding before navigating to Login.
 class SplashScreen extends StatefulWidget {
@@ -23,7 +24,12 @@ class _SplashScreenState extends State<SplashScreen> {
   void _startTimer() {
     _navigationTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.login);
+        final user = AuthService().currentUser;
+        if (user != null) {
+          Navigator.pushReplacementNamed(context, AppRoutes.main);
+        } else {
+          Navigator.pushReplacementNamed(context, AppRoutes.login);
+        }
       }
     });
   }
