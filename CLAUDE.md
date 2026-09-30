@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MachineTrack is a Flutter app for logging factory machine inspections and breakdowns. All code lives in the Flutter project under `frontend/`. The Dart package is named `frontend`, so imports look like `package:frontend/...`. There is no separate server. The backend is Firebase (Auth + Cloud Firestore, project `machinetrack-701bd`), which the app calls directly.
+MachineTrack is a Flutter app for logging factory machine inspections and breakdowns. The app lives in the Flutter project under `frontend/`. The Dart package is named `frontend`, so imports look like `package:frontend/...`. There is no separate server. The backend is Firebase (Auth + Cloud Firestore, project `machinetrack-701bd`), which the app calls directly. Its server-side pieces (security rules, indexes, emulator config, and later Cloud Functions) live in `backend/`. The data model and roadmap are in `backend/README.md`.
 
 ## Commands
 
@@ -18,6 +18,16 @@ flutter test                                   # run all tests
 flutter test test/machine_model_test.dart      # run a single test file
 flutter test --plain-name "copyWith updates"   # run tests whose name contains the string
 ```
+
+Run these from `backend/` (needs Node 20+ and Java 21+):
+
+```bash
+npm install
+npm test            # Firestore security-rules tests on the emulator
+npm run emulators   # local Auth + Firestore emulators, UI on :4000
+```
+
+`backend/firestore.rules` doubles as the schema: it rejects unknown fields and enforces the domain values below. When you change a Firestore field or status value, update the rules and `backend/tests/` along with the Dart code.
 
 The FlutterFire CLI generates `lib/firebase_options.dart` and `android/app/google-services.json`, with its settings in `firebase.json`. Regenerate them with `flutterfire configure`; don't edit them by hand.
 
