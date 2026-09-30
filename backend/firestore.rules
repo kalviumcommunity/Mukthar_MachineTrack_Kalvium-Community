@@ -1,0 +1,200 @@
+rules_version = '2';
+
+// Security rules for MachineTrack. The Flutter app talks to Firestore directly,
+// so these rules are the only server-side validation. Data model: backend/README.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return signedIn() && exists(path) && get(path).data.role == 'admin';
+    }
+
+    function isString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function isNonEmptyString(value, maxLength) {
+      return isString(value, maxLength) && value.trim().size() > 0;
+    }
+
+    function optionalString(data, field, maxLength) {
+      return !(field in data) || isString(data[field], maxLength);
+    }
+
+    function machineExists(machineId) {
+      return exists(/databases/$(database)/documents/machines/$(machineId));
+    }
+
+    // Domain values. Keep these in sync with the frontend (see CLAUDE.md).
+    function machineStatuses() {
+      return ['Running', 'Maintenance', 'Breakdown', 'Idle'];
+    }
+
+    function inspectionConditions() {
+      return ['Passed', 'Needs Repair', 'Critical'];
+    }
+
+    function breakdownSeverities() {
+      return ['Critical', 'Needs Repair', 'Warning'];
+    }
+
+    // ---------- users/{uid} ----------
+    // Profile doc keyed by the Firebase Auth uid.
+
+    function validNewUser(uid, data) {
+      return data.keys().hasAll(['name', 'email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['name', 'email', 'role', 'createdAt', 'shift'])
+        && isNonEmptyString(data.name, 100)
+        && data.email == request.auth.token.email
+        && data.role == 'technician'
+        && data.createdAt == request.time
+        && optionalString(data, 'shift', 100);
+    }
+
+    match /users/{uid} {
+      // Any signed-in user can see the team list on the Profile screen.
+      allow read: if signedIn();
+      // Users create their own profile and can only be a technician.
+      allow create: if isSelf(uid) && validNewUser(uid, request.resource.data);
+      // Users edit their own name and shift. Only admins change roles.
+      allow update: if (isSelf(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'shift'])
+          && isNonEmptyString(request.resource.data.name, 100)
+          && optionalString(request.resource.data, 'shift', 100))
+        || (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+          && request.resource.data.role in ['technician', 'admin']);
+      allow delete: if false;
+    }
+
+    // ---------- machines/{machineId} ----------
+    // Fields match Machine.toMap() in frontend/lib/models/machine.dart.
+
+    function validMachine(data) {
+      return data.keys().hasAll(['name', 'code', 'location', 'status'])
+        && data.keys().hasOnly([
+          'name', 'code', 'location', 'status', 'lastInspected', 'model',
+          'serialNumber', 'assignedTech', 'installationDate'
+        ])
+        && isNonEmptyString(data.name, 100)
+        && isNonEmptyString(data.code, 50)
+        && isNonEmptyString(data.location, 100)
+        && data.status in machineStatuses()
+        && optionalString(data, 'lastInspected', 50)
+        && optionalString(data, 'model', 100)
+        && optionalString(data, 'serialNumber', 100)
+        && optionalString(data, 'assignedTech', 100)
+        && optionalString(data, 'installationDate', 50);
+    }
+
+    match /machines/{machineId} {
+      allow read: if signedIn();
+      // Only admins edit the machine inventory. Status changes that follow
+      // inspections and breakdowns will come from Cloud Functions, which bypass these rules.
+      allow create, update: if isAdmin() && validMachine(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- inspections/{inspectionId} ----------
+    // Inspections are an audit trail: no one can edit them, and only admins can delete.
+
+    function validInspection(data) {
+      return data.keys().hasAll([
+          'machineId', 'machineName', 'machineCode', 'condition', 'checklist',
+          'inspectorId', 'inspectorName', 'inspectedAt', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'machineId', 'machineName', 'machineCode', 'machineLocation',
+          'condition', 'checklist', 'notes', 'inspectorId', 'inspectorName',
+          'shift', 'inspectedAt', 'createdAt'
+        ])
+        && isNonEmptyString(data.machineId, 100)
+        && machineExists(data.machineId)
+        && isNonEmptyString(data.machineName, 100)
+        && isNonEmptyString(data.machineCode, 50)
+        && optionalString(data, 'machineLocation', 100)
+        && data.condition in inspectionConditions()
+        && data.checklist is map
+        && data.checklist.size() <= 50
+        && optionalString(data, 'notes', 2000)
+        && data.inspectorId == request.auth.uid
+        && isNonEmptyString(data.inspectorName, 100)
+        && optionalString(data, 'shift', 100)
+        && data.inspectedAt is timestamp
+        && data.createdAt == request.time;
+    }
+
+    match /inspections/{inspectionId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validInspection(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- breakdowns/{breakdownId} ----------
+    // New breakdowns start with resolved == false. Only the resolution fields
+    // can change after that, and only the reporter or an admin can change them.
+
+    function validBreakdown(data) {
+      return data.keys().hasAll([
+          'machineId', 'machineName', 'machineCode', 'title', 'description',
+          'severity', 'reportedById', 'reportedByName', 'resolved', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'machineId', 'machineName', 'machineCode', 'machineLocation', 'title',
+          'description', 'severity', 'component', 'priority', 'reportedById',
+          'reportedByName', 'shift', 'resolved', 'createdAt'
+        ])
+        && isNonEmptyString(data.machineId, 100)
+        && machineExists(data.machineId)
+        && isNonEmptyString(data.machineName, 100)
+        && isNonEmptyString(data.machineCode, 50)
+        && optionalString(data, 'machineLocation', 100)
+        && isNonEmptyString(data.title, 150)
+        && isNonEmptyString(data.description, 2000)
+        && data.severity in breakdownSeverities()
+        && optionalString(data, 'component', 100)
+        && optionalString(data, 'priority', 50)
+        && data.reportedById == request.auth.uid
+        && isNonEmptyString(data.reportedByName, 100)
+        && optionalString(data, 'shift', 100)
+        && data.resolved == false
+        && data.createdAt == request.time;
+    }
+
+    function validResolution(before, after) {
+      return before.resolved == false
+        && after.diff(before).affectedKeys()
+            .hasOnly(['resolved', 'resolvedAt', 'resolvedById', 'resolutionNotes'])
+        && after.resolved == true
+        && after.resolvedAt == request.time
+        && after.resolvedById == request.auth.uid
+        && optionalString(after, 'resolutionNotes', 2000);
+    }
+
+    match /breakdowns/{breakdownId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validBreakdown(request.resource.data);
+      allow update: if signedIn()
+        && (resource.data.reportedById == request.auth.uid || isAdmin())
+        && validResolution(resource.data, request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

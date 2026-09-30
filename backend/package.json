@@ -1,0 +1,20 @@
+{
+  "name": "machinetrack-backend",
+  "private": true,
+  "description": "Firebase backend (Firestore rules, indexes, emulators) for MachineTrack",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "emulators": "firebase emulators:start --project demo-machinetrack",
+    "test": "firebase emulators:exec --only firestore --project demo-machinetrack \"node --test tests/*.test.js\"",
+    "test:watch": "node --test --watch tests/",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^15.32.0"
+  }
+}
