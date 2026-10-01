@@ -84,14 +84,15 @@ service cloud.firestore {
     function validMachine(data) {
       return data.keys().hasAll(['name', 'code', 'location', 'status'])
         && data.keys().hasOnly([
-          'name', 'code', 'location', 'status', 'lastInspected', 'model',
-          'serialNumber', 'assignedTech', 'installationDate'
+          'name', 'code', 'location', 'status', 'lastInspected', 'lastInspectedAt',
+          'model', 'serialNumber', 'assignedTech', 'installationDate'
         ])
         && isNonEmptyString(data.name, 100)
         && isNonEmptyString(data.code, 50)
         && isNonEmptyString(data.location, 100)
         && data.status in machineStatuses()
         && optionalString(data, 'lastInspected', 50)
+        && (!('lastInspectedAt' in data) || data.lastInspectedAt is timestamp)
         && optionalString(data, 'model', 100)
         && optionalString(data, 'serialNumber', 100)
         && optionalString(data, 'assignedTech', 100)
@@ -100,8 +101,8 @@ service cloud.firestore {
 
     match /machines/{machineId} {
       allow read: if signedIn();
-      // Only admins edit the machine inventory. Status changes that follow
-      // inspections and breakdowns will come from Cloud Functions, which bypass these rules.
+      // Only admins edit the machine inventory. The syncMachineOn* Cloud Functions
+      // set status and lastInspectedAt from records, and they bypass these rules.
       allow create, update: if isAdmin() && validMachine(request.resource.data);
       allow delete: if isAdmin();
     }
