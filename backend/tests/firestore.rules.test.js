@@ -162,6 +162,16 @@ describe('machines', () => {
     await assertFails(setDoc(doc(adminDb(), 'machines/m9'), { ...MACHINE, status: 'Broken' }));
   });
 
+  test('admin can still edit a machine after functions set lastInspectedAt', async () => {
+    await testEnv.withSecurityRulesDisabled((context) =>
+      updateDoc(doc(context.firestore(), 'machines/m2'), { lastInspectedAt: Timestamp.now() }));
+    await assertSucceeds(updateDoc(doc(adminDb(), 'machines/m2'), { location: 'Zone C' }));
+  });
+
+  test('lastInspectedAt must be a timestamp', async () => {
+    await assertFails(setDoc(doc(adminDb(), 'machines/m9'), { ...MACHINE, lastInspectedAt: 'today' }));
+  });
+
   test('unknown fields are rejected', async () => {
     await assertFails(setDoc(doc(adminDb(), 'machines/m9'), { ...MACHINE, price: 10 }));
   });
