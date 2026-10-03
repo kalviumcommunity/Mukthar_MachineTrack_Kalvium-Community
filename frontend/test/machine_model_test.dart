@@ -119,5 +119,79 @@ void main() {
       expect(machine1.hashCode, equals(machine2.hashCode));
       expect(machine1, isNot(equals(machine3)));
     });
+
+    test('handles lastInspectedAt Timestamp correctly and formats relative time', () {
+      final now = DateTime(2026, 10, 3, 12, 0, 0);
+
+      // Just now (< 1 min)
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(seconds: 30)), clock: now),
+        equals('Just now'),
+      );
+
+      // 25 mins ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(minutes: 25)), clock: now),
+        equals('25 mins ago'),
+      );
+
+      // 1 min ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(minutes: 1)), clock: now),
+        equals('1 min ago'),
+      );
+
+      // 2 hours ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(hours: 2)), clock: now),
+        equals('2 hours ago'),
+      );
+
+      // 1 day ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(days: 1)), clock: now),
+        equals('Yesterday'),
+      );
+
+      // 3 days ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(days: 3)), clock: now),
+        equals('3 days ago'),
+      );
+
+      // 10 days ago (formatted date string)
+      final pastDate = DateTime(2026, 9, 23, 10, 0);
+      expect(
+        Machine.formatRelativeTime(pastDate, clock: now),
+        equals('23 Sep 2026'),
+      );
+    });
+
+    test('parses lastInspectedAt from various formats (DateTime, String, millis)', () {
+      final dt = DateTime(2026, 10, 3, 11, 30);
+      final mapWithIso = {
+        'id': 'M-1',
+        'name': 'Press',
+        'code': 'P-01',
+        'location': 'Zone A',
+        'lastInspectedAt': dt.toIso8601String(),
+      };
+      final machineFromIso = Machine.fromMap(mapWithIso);
+      expect(machineFromIso.lastInspectedAt, equals(dt));
+
+      final mapWithMillis = {
+        'id': 'M-2',
+        'name': 'Lathe',
+        'code': 'L-01',
+        'location': 'Zone B',
+        'lastInspectedAt': dt.millisecondsSinceEpoch,
+      };
+      final machineFromMillis = Machine.fromMap(mapWithMillis);
+      expect(machineFromMillis.lastInspectedAt, equals(dt));
+
+      final routeMap = machineFromIso.toRouteMap();
+      expect(routeMap['id'], equals('M-1'));
+      expect(routeMap['lastInspectedAt'], equals(dt.toIso8601String()));
+    });
   });
 }

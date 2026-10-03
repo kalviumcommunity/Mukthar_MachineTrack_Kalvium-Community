@@ -8,6 +8,7 @@ class Machine {
   final String location;
   final String status;
   final String? lastInspected;
+  final DateTime? lastInspectedAt;
   final String? model;
   final String? serialNumber;
   final String? assignedTech;
@@ -20,14 +21,61 @@ class Machine {
     required this.location,
     this.status = 'Idle',
     this.lastInspected,
+    this.lastInspectedAt,
     this.model,
     this.serialNumber,
     this.assignedTech,
     this.installationDate,
   });
 
+  /// Formats a [DateTime] into a friendly relative time string (e.g., "25 mins ago").
+  static String formatRelativeTime(DateTime dateTime, {DateTime? clock}) {
+    final now = clock ?? DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.isNegative || difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final mins = difference.inMinutes;
+      return '$mins ${mins == 1 ? 'min' : 'mins'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dateTime.day} ${months[dateTime.month - 1]} ${dateTime.year}';
+    }
+  }
+
+  /// Returns the display text for last inspection, prioritizing formatted [lastInspectedAt].
+  String? get formattedLastInspected {
+    if (lastInspectedAt != null) {
+      return formatRelativeTime(lastInspectedAt!);
+    }
+    return lastInspected;
+  }
+
   /// Factory constructor to parse data from a Map.
   factory Machine.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    DateTime? parsedLastInspectedAt;
+    final rawTimestamp = map['lastInspectedAt'];
+    if (rawTimestamp is Timestamp) {
+      parsedLastInspectedAt = rawTimestamp.toDate();
+    } else if (rawTimestamp is DateTime) {
+      parsedLastInspectedAt = rawTimestamp;
+    } else if (rawTimestamp is String && rawTimestamp.isNotEmpty) {
+      parsedLastInspectedAt = DateTime.tryParse(rawTimestamp);
+    } else if (rawTimestamp is int) {
+      parsedLastInspectedAt = DateTime.fromMillisecondsSinceEpoch(rawTimestamp);
+    }
+
     return Machine(
       id: id.isNotEmpty ? id : (map['id']?.toString() ?? ''),
       name: map['name']?.toString() ?? '',
@@ -35,6 +83,7 @@ class Machine {
       location: map['location']?.toString() ?? '',
       status: map['status']?.toString() ?? 'Idle',
       lastInspected: map['lastInspected']?.toString(),
+      lastInspectedAt: parsedLastInspectedAt,
       model: map['model']?.toString(),
       serialNumber: map['serialNumber']?.toString(),
       assignedTech: map['assignedTech']?.toString(),
@@ -56,6 +105,24 @@ class Machine {
       'location': location,
       'status': status,
       if (lastInspected != null) 'lastInspected': lastInspected,
+      if (lastInspectedAt != null) 'lastInspectedAt': Timestamp.fromDate(lastInspectedAt!),
+      if (model != null) 'model': model,
+      if (serialNumber != null) 'serialNumber': serialNumber,
+      if (assignedTech != null) 'assignedTech': assignedTech,
+      if (installationDate != null) 'installationDate': installationDate,
+    };
+  }
+
+  /// Converts the Machine instance into a Map for route arguments.
+  Map<String, dynamic> toRouteMap() {
+    return {
+      'id': id,
+      'name': name,
+      'code': code,
+      'location': location,
+      'status': status,
+      if (formattedLastInspected != null) 'lastInspected': formattedLastInspected,
+      if (lastInspectedAt != null) 'lastInspectedAt': lastInspectedAt!.toIso8601String(),
       if (model != null) 'model': model,
       if (serialNumber != null) 'serialNumber': serialNumber,
       if (assignedTech != null) 'assignedTech': assignedTech,
@@ -71,6 +138,7 @@ class Machine {
     String? location,
     String? status,
     String? lastInspected,
+    DateTime? lastInspectedAt,
     String? model,
     String? serialNumber,
     String? assignedTech,
@@ -83,6 +151,7 @@ class Machine {
       location: location ?? this.location,
       status: status ?? this.status,
       lastInspected: lastInspected ?? this.lastInspected,
+      lastInspectedAt: lastInspectedAt ?? this.lastInspectedAt,
       model: model ?? this.model,
       serialNumber: serialNumber ?? this.serialNumber,
       assignedTech: assignedTech ?? this.assignedTech,
@@ -101,6 +170,7 @@ class Machine {
           location == other.location &&
           status == other.status &&
           lastInspected == other.lastInspected &&
+          lastInspectedAt == other.lastInspectedAt &&
           model == other.model &&
           serialNumber == other.serialNumber &&
           assignedTech == other.assignedTech &&
@@ -114,6 +184,7 @@ class Machine {
       location.hashCode ^
       status.hashCode ^
       lastInspected.hashCode ^
+      lastInspectedAt.hashCode ^
       model.hashCode ^
       serialNumber.hashCode ^
       assignedTech.hashCode ^
