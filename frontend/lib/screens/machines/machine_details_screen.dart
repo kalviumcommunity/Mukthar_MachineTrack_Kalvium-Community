@@ -1,27 +1,128 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../models/machine.dart';
+import '../../services/machine_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/record_card.dart';
 
-/// Machine Details Screen displaying comprehensive machine specs & recent activity.
-class MachineDetailsScreen extends StatelessWidget {
+/// Machine Details Screen displaying comprehensive machine specs & recent activity backed by Firestore.
+class MachineDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? machineData;
+  final String? machineId;
+  final MachineService? machineService;
 
-  const MachineDetailsScreen({super.key, this.machineData});
+  const MachineDetailsScreen({
+    super.key,
+    this.machineData,
+    this.machineId,
+    this.machineService,
+  });
+
+  @override
+  State<MachineDetailsScreen> createState() => _MachineDetailsScreenState();
+}
+
+class _MachineDetailsScreenState extends State<MachineDetailsScreen> {
+  late final MachineService _machineService;
+  StreamSubscription<Machine?>? _machineSubscription;
+  Machine? _liveMachine;
+  bool _isLoading = false;
+
+  String get _machineId =>
+      widget.machineId ??
+      widget.machineData?['id']?.toString() ??
+      '';
+
+  @override
+  void initState() {
+    super.initState();
+    _machineService = widget.machineService ?? MachineService();
+    if (widget.machineData != null) {
+      _liveMachine = Machine.fromMap(widget.machineData!, id: _machineId);
+    }
+    _subscribeToMachine();
+  }
+
+  void _subscribeToMachine() {
+    if (_machineId.isEmpty || !_machineService.isAvailable) return;
+
+    if (_liveMachine == null) {
+      setState(() => _isLoading = true);
+    }
+
+    _machineSubscription = _machineService.getMachineStream(_machineId).listen(
+      (machine) {
+        if (mounted) {
+          setState(() {
+            if (machine != null) {
+              _liveMachine = machine;
+            }
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (_) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _machineSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final name = machineData?['name'] ?? 'Hydraulic Press 500T';
-    final code = machineData?['code'] ?? 'PRESS-500T-04';
-    final location = machineData?['location'] ?? 'Zone A - Heavy Stamping';
-    final status = machineData?['status'] ?? 'Breakdown';
-    final model = machineData?['model'] ?? 'StamperPro 500';
-    final serialNumber = machineData?['serialNumber'] ?? 'SN-99812-A';
-    final assignedTech = machineData?['assignedTech'] ?? 'Mukthar';
+    if (_isLoading && _liveMachine == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        appBar: AppBar(
+          title: const Text('Machine Specifications'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+        ),
+      );
+    }
+
+    final machine = _liveMachine;
+    final name = (machine != null && machine.name.isNotEmpty)
+        ? machine.name
+        : (widget.machineData?['name']?.toString() ?? 'Hydraulic Press 500T');
+    final code = (machine != null && machine.code.isNotEmpty)
+        ? machine.code
+        : (widget.machineData?['code']?.toString() ?? 'PRESS-500T-04');
+    final location = (machine != null && machine.location.isNotEmpty)
+        ? machine.location
+        : (widget.machineData?['location']?.toString() ?? 'Zone A - Heavy Stamping');
+    final status = (machine != null && machine.status.isNotEmpty)
+        ? machine.status
+        : (widget.machineData?['status']?.toString() ?? 'Breakdown');
+    final model = (machine?.model != null && machine!.model!.isNotEmpty)
+        ? machine.model!
+        : (widget.machineData?['model']?.toString() ?? 'StamperPro 500');
+    final serialNumber = (machine?.serialNumber != null && machine!.serialNumber!.isNotEmpty)
+        ? machine.serialNumber!
+        : (widget.machineData?['serialNumber']?.toString() ?? 'SN-99812-A');
+    final assignedTech = (machine?.assignedTech != null && machine!.assignedTech!.isNotEmpty)
+        ? machine.assignedTech!
+        : (widget.machineData?['assignedTech']?.toString() ?? 'Mukthar');
+    final installationDate = (machine?.installationDate != null && machine!.installationDate!.isNotEmpty)
+        ? machine.installationDate!
+        : (widget.machineData?['installationDate']?.toString() ?? '12 Jan 2024');
 
     Color statusColor;
-    switch (status.toString().toLowerCase()) {
+    switch (status.toLowerCase()) {
       case 'running':
       case 'active':
         statusColor = AppTheme.statusRunning;
@@ -35,6 +136,20 @@ class MachineDetailsScreen extends StatelessWidget {
       default:
         statusColor = AppTheme.statusIdle;
     }
+
+    final currentArgs = machine?.toRouteMap() ??
+        widget.machineData ??
+        {
+          'id': _machineId.isNotEmpty ? _machineId : '1',
+          'name': name,
+          'code': code,
+          'location': location,
+          'status': status,
+          'model': model,
+          'serialNumber': serialNumber,
+          'assignedTech': assignedTech,
+          'installationDate': installationDate,
+        };
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
@@ -182,7 +297,7 @@ class MachineDetailsScreen extends StatelessWidget {
                     const Divider(height: 20, color: AppTheme.borderLight),
                     _buildSpecRow('Assigned Lead Tech', assignedTech),
                     const Divider(height: 20, color: AppTheme.borderLight),
-                    _buildSpecRow('Installation Date', '12 Jan 2024'),
+                    _buildSpecRow('Installation Date', installationDate),
                   ],
                 ),
               ),
@@ -199,14 +314,7 @@ class MachineDetailsScreen extends StatelessWidget {
                         Navigator.pushNamed(
                           context,
                           AppRoutes.newInspection,
-                          arguments: machineData ?? {
-                            'id': '1',
-                            'name': name,
-                            'code': code,
-                            'location': location,
-                            'status': status,
-                            'model': model,
-                          },
+                          arguments: currentArgs,
                         );
                       },
                     ),
@@ -221,14 +329,7 @@ class MachineDetailsScreen extends StatelessWidget {
                         Navigator.pushNamed(
                           context,
                           AppRoutes.reportBreakdown,
-                          arguments: machineData ?? {
-                            'id': '1',
-                            'name': name,
-                            'code': code,
-                            'location': location,
-                            'status': status,
-                            'model': model,
-                          },
+                          arguments: currentArgs,
                         );
                       },
                     ),
