@@ -8,6 +8,7 @@ class Machine {
   final String location;
   final String status;
   final String? lastInspected;
+  final DateTime? lastInspectedAt;
   final String? model;
   final String? serialNumber;
   final String? assignedTech;
@@ -20,11 +21,57 @@ class Machine {
     required this.location,
     this.status = 'Idle',
     this.lastInspected,
+    this.lastInspectedAt,
     this.model,
     this.serialNumber,
     this.assignedTech,
     this.installationDate,
   });
+
+  /// Formats a [DateTime] into a friendly relative time string (e.g. "25 mins ago").
+  static String formatRelativeTime(DateTime dateTime, {DateTime? now}) {
+    final current = now ?? DateTime.now();
+    final difference = current.difference(dateTime);
+
+    if (difference.isNegative || difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final mins = difference.inMinutes;
+      return mins == 1 ? '1 min ago' : '$mins mins ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return hours == 1 ? '1 hour ago' : '$hours hours ago';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return weeks == 1 ? '1 week ago' : '$weeks weeks ago';
+    } else {
+      final months = (difference.inDays / 30).floor();
+      return months == 1 ? '1 month ago' : '$months months ago';
+    }
+  }
+
+  /// Returns the relative time string computed from [lastInspectedAt],
+  /// or falls back to the static [lastInspected] string if available.
+  String get displayLastInspected {
+    if (lastInspectedAt != null) {
+      return formatRelativeTime(lastInspectedAt!);
+    }
+    return lastInspected ?? 'Never';
+  }
+
+  /// Helper to safely parse dynamic timestamp / DateTime / string / int.
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   /// Factory constructor to parse data from a Map.
   factory Machine.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -35,6 +82,7 @@ class Machine {
       location: map['location']?.toString() ?? '',
       status: map['status']?.toString() ?? 'Idle',
       lastInspected: map['lastInspected']?.toString(),
+      lastInspectedAt: _parseDateTime(map['lastInspectedAt']),
       model: map['model']?.toString(),
       serialNumber: map['serialNumber']?.toString(),
       assignedTech: map['assignedTech']?.toString(),
@@ -56,6 +104,7 @@ class Machine {
       'location': location,
       'status': status,
       if (lastInspected != null) 'lastInspected': lastInspected,
+      if (lastInspectedAt != null) 'lastInspectedAt': Timestamp.fromDate(lastInspectedAt!),
       if (model != null) 'model': model,
       if (serialNumber != null) 'serialNumber': serialNumber,
       if (assignedTech != null) 'assignedTech': assignedTech,
@@ -71,6 +120,7 @@ class Machine {
     String? location,
     String? status,
     String? lastInspected,
+    DateTime? lastInspectedAt,
     String? model,
     String? serialNumber,
     String? assignedTech,
@@ -83,6 +133,7 @@ class Machine {
       location: location ?? this.location,
       status: status ?? this.status,
       lastInspected: lastInspected ?? this.lastInspected,
+      lastInspectedAt: lastInspectedAt ?? this.lastInspectedAt,
       model: model ?? this.model,
       serialNumber: serialNumber ?? this.serialNumber,
       assignedTech: assignedTech ?? this.assignedTech,
@@ -101,6 +152,7 @@ class Machine {
           location == other.location &&
           status == other.status &&
           lastInspected == other.lastInspected &&
+          lastInspectedAt == other.lastInspectedAt &&
           model == other.model &&
           serialNumber == other.serialNumber &&
           assignedTech == other.assignedTech &&
@@ -114,6 +166,7 @@ class Machine {
       location.hashCode ^
       status.hashCode ^
       lastInspected.hashCode ^
+      lastInspectedAt.hashCode ^
       model.hashCode ^
       serialNumber.hashCode ^
       assignedTech.hashCode ^
@@ -121,6 +174,6 @@ class Machine {
 
   @override
   String toString() {
-    return 'Machine(id: $id, name: $name, code: $code, location: $location, status: $status)';
+    return 'Machine(id: $id, name: $name, code: $code, location: $location, status: $status, lastInspectedAt: $lastInspectedAt)';
   }
 }
