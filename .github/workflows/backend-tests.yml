@@ -1,0 +1,44 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main, backend ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    branches: [ main, backend ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+
+jobs:
+  test:
+    name: Rules, Functions & Scripts Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 (required by Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci || npm install
+          npm --prefix functions ci || npm --prefix functions install
+
+      - name: Run backend test suite (Rules, Functions, Admin Scripts)
+        run: |
+          cd backend
+          npm test

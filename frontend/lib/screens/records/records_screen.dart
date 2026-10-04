@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../models/breakdown.dart';
+import '../../models/inspection.dart';
+import '../../services/breakdown_service.dart';
+import '../../services/inspection_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/record_card.dart';
 
@@ -20,7 +25,16 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
   String _sortBy = 'Newest';
   bool _isLoading = false;
 
-  final List<Map<String, String>> _allRecords = const [
+  final InspectionService _inspectionService = InspectionService();
+  final BreakdownService _breakdownService = BreakdownService();
+  StreamSubscription<List<Inspection>>? _inspectionsSub;
+  StreamSubscription<List<Breakdown>>? _breakdownsSub;
+
+  List<Inspection> _latestInspections = [];
+  List<Breakdown> _latestBreakdowns = [];
+
+  // Static Fallback Records Dataset
+  static const List<Map<String, dynamic>> _allStaticRecords = [
     {
       'id': 'INS-2026-0812',
       'title': 'Shift Start Checklist Passed',
@@ -120,10 +134,48 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
+    _subscribeToRecords();
+  }
+
+  void _subscribeToRecords() {
+    _inspectionsSub = _inspectionService.getInspectionsStream().listen((inspections) {
+      if (mounted) {
+        setState(() {
+          _latestInspections = inspections;
+        });
+      }
+    });
+
+    _breakdownsSub = _breakdownService.getBreakdownsStream().listen((breakdowns) {
+      if (mounted) {
+        setState(() {
+          _latestBreakdowns = breakdowns;
+        });
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> get _currentRecords {
+    if (_latestInspections.isNotEmpty || _latestBreakdowns.isNotEmpty) {
+      final combined = <Map<String, dynamic>>[
+        ..._latestInspections.map((i) => i.toMapForRecord()),
+        ..._latestBreakdowns.map((b) => b.toMapForRecord()),
+      ];
+      // Sort newest first
+      combined.sort((a, b) {
+        final dateA = a['rawDate'] as DateTime? ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = b['rawDate'] as DateTime? ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return dateB.compareTo(dateA);
+      });
+      return combined;
+    }
+    return _allStaticRecords;
   }
 
   @override
   void dispose() {
+    _inspectionsSub?.cancel();
+    _breakdownsSub?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -131,7 +183,18 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
 
   Future<void> _refreshRecords() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      final inspections = await _inspectionService.getInspections();
+      final breakdowns = await _breakdownService.getBreakdowns();
+      if (mounted) {
+        setState(() {
+          _latestInspections = inspections;
+          _latestBreakdowns = breakdowns;
+        });
+      }
+    } catch (_) {
+      // Quiet fallback
+    }
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -151,36 +214,40 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
       _selectedStatusFilter != 'All' ||
       _sortBy != 'Newest';
 
-  List<Map<String, String>> _getFilteredRecords(int tabIndex) {
-    return _allRecords.where((r) {
+  List<Map<String, dynamic>> _getFilteredRecords(int tabIndex) {
+    final list = _currentRecords.where((r) {
       // 1. Tab Type Filter
       bool matchesType = true;
+      final type = (r['recordType'] ?? '').toString();
       if (tabIndex == 1) {
-        matchesType = r['recordType'] == 'Inspection';
+        matchesType = type == 'Inspection';
       } else if (tabIndex == 2) {
-        matchesType = r['recordType'] == 'Breakdown';
+        matchesType = type == 'Breakdown';
       }
 
       // 2. Status / Severity Filter
       bool matchesStatus = true;
       if (_selectedStatusFilter != 'All') {
-        matchesStatus = r['status']!.toLowerCase() == _selectedStatusFilter.toLowerCase();
+        matchesStatus =
+            (r['status'] ?? '').toString().toLowerCase() == _selectedStatusFilter.toLowerCase();
       }
 
       // 3. Search Query (Machine name, ID, title, description, reporter)
       bool matchesSearch = true;
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
-        matchesSearch = r['title']!.toLowerCase().contains(q) ||
-            r['machineName']!.toLowerCase().contains(q) ||
-            (r['machineCode']?.toLowerCase().contains(q) ?? false) ||
-            r['id']!.toLowerCase().contains(q) ||
-            r['description']!.toLowerCase().contains(q) ||
-            r['reportedBy']!.toLowerCase().contains(q);
+        matchesSearch = (r['title'] ?? '').toString().toLowerCase().contains(q) ||
+            (r['machineName'] ?? '').toString().toLowerCase().contains(q) ||
+            (r['machineCode']?.toString().toLowerCase().contains(q) ?? false) ||
+            (r['id'] ?? '').toString().toLowerCase().contains(q) ||
+            (r['description'] ?? '').toString().toLowerCase().contains(q) ||
+            (r['reportedBy'] ?? '').toString().toLowerCase().contains(q);
       }
 
       return matchesType && matchesStatus && matchesSearch;
     }).toList();
+
+    return list;
   }
 
   void _openFilterBottomSheet() {
@@ -220,7 +287,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Filter Activity Records',
+                          'Filter Records',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -237,9 +304,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                           child: const Text(
                             'Reset All',
                             style: TextStyle(
-                              fontSize: 13,
+                              color: AppTheme.statusBreakdown,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.secondaryBlue,
+                              fontSize: 13,
                             ),
                           ),
                         ),
@@ -248,9 +315,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     const Divider(height: 16, color: AppTheme.borderLight),
                     const SizedBox(height: 8),
 
-                    // Status / Severity Section
+                    // Status / Severity Filter
                     const Text(
-                      'Record Status / Condition',
+                      'Record Status / Severity',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -261,7 +328,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: ['All', 'Passed', 'Needs Repair', 'Critical'].map((status) {
+                      children: ['All', 'Passed', 'Needs Repair', 'Critical', 'Warning'].map((status) {
                         final isSelected = tempStatus == status;
                         return ChoiceChip(
                           label: Text(status),
@@ -286,9 +353,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 16),
 
-                    // Sort By
+                    // Sort Order
                     const Text(
-                      'Sort By',
+                      'Sort Order',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -298,7 +365,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
-                      children: ['Newest', 'Machine Name', 'Status'].map((sort) {
+                      children: ['Newest', 'Oldest'].map((sort) {
                         final isSelected = tempSort == sort;
                         return ChoiceChip(
                           label: Text(sort),
@@ -323,7 +390,6 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 24),
 
-                    // Apply Button
                     CustomButton(
                       text: 'Apply Filters',
                       onPressed: () {
@@ -344,45 +410,12 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     );
   }
 
-  void _handleRecordTap(Map<String, String> item, int index) {
-    if (item['recordType'] == 'Inspection') {
-      Navigator.pushNamed(
-        context,
-        AppRoutes.inspectionDetails,
-        arguments: {
-          'id': item['id'] ?? 'INS-2026-0812',
-          'machineName': item['machineName'],
-          'machineCode': item['machineCode'] ?? 'M-00${index + 1}',
-          'machineLocation': item['machineLocation'] ?? 'Plant Floor A',
-          'date': item['timestamp'],
-          'time': '08:30 AM',
-          'condition': item['status'],
-          'notes': item['description'],
-          'reportedBy': '${item['reportedBy']} (Inspector)',
-          'shift': item['shift'] ?? 'Shift #1',
-        },
-      );
-    } else {
-      Navigator.pushNamed(
-        context,
-        AppRoutes.recordDetails,
-        arguments: {
-          'id': item['id'] ?? 'REC-2026-101',
-          'title': item['title'],
-          'machineName': item['machineName'],
-          'machineCode': item['machineCode'] ?? 'M-00${index + 1}',
-          'machineLocation': item['machineLocation'] ?? 'Plant Floor A',
-          'recordType': 'Breakdown',
-          'status': item['status'],
-          'timestamp': item['timestamp'],
-          'description': item['description'],
-          'reportedBy': item['reportedBy'],
-          'shift': item['shift'] ?? 'Shift #1 • Plant Floor A',
-          'priority': item['priority'] ?? 'Urgent',
-          'component': item['component'] ?? 'Equipment Subsystem',
-        },
-      );
-    }
+  void _handleRecordTap(Map<String, dynamic> record, int index) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.recordDetails,
+      arguments: record,
+    );
   }
 
   @override
@@ -390,7 +423,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('Activity Records'),
+        title: const Text('Activity Logs & Audits'),
         actions: [
           Stack(
             children: [
@@ -415,29 +448,25 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppTheme.primaryBlue,
-          unselectedLabelColor: AppTheme.textMuted,
-          indicatorColor: AppTheme.primaryBlue,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-          tabs: const [
-            Tab(text: 'All Records'),
-            Tab(text: 'Inspections'),
-            Tab(text: 'Breakdowns'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            color: AppTheme.surfaceWhite,
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: AppTheme.primaryBlue,
+              indicatorWeight: 3,
+              labelColor: AppTheme.primaryBlue,
+              unselectedLabelColor: AppTheme.textSecondary,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              tabs: const [
+                Tab(text: 'All Logs'),
+                Tab(text: 'Inspections'),
+                Tab(text: 'Breakdowns'),
+              ],
+            ),
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_task_rounded, size: 20),
-        label: const Text('Log Inspection', style: TextStyle(fontWeight: FontWeight.w700)),
-        onPressed: () {
-          Navigator.pushNamed(context, AppRoutes.newInspection);
-        },
       ),
       body: SafeArea(
         child: Column(
@@ -453,7 +482,7 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                   });
                 },
                 decoration: InputDecoration(
-                  hintText: 'Search machine, record title, or reporter...',
+                  hintText: 'Search title, machine, reporter or ID...',
                   prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textMuted),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
@@ -471,20 +500,20 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
               ),
             ),
 
-            // Status Filter Quick Chips
+            // Status Filter Chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
-                children: ['All', 'Passed', 'Needs Repair', 'Critical'].map((status) {
-                  final isSelected = _selectedStatusFilter == status;
+                children: ['All', 'Passed', 'Needs Repair', 'Critical', 'Warning'].map((filter) {
+                  final isSelected = _selectedStatusFilter == filter;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: FilterChip(
                       selected: isSelected,
-                      label: Text(status),
+                      label: Text(filter),
                       labelStyle: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                         color: isSelected ? Colors.white : AppTheme.textSecondary,
                       ),
@@ -493,9 +522,9 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                       side: BorderSide(
                         color: isSelected ? AppTheme.primaryBlue : AppTheme.borderLight,
                       ),
-                      onSelected: (selected) {
+                      onSelected: (bool selected) {
                         setState(() {
-                          _selectedStatusFilter = status;
+                          _selectedStatusFilter = filter;
                         });
                       },
                     ),
@@ -598,12 +627,11 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
                   ? 'No records matching "$_searchQuery" found in this category.'
                   : _selectedStatusFilter != 'All'
                       ? 'No records with status "$_selectedStatusFilter" found in this tab.'
-                      : 'No logs recorded in this section yet.',
+                      : 'No inspection or breakdown logs recorded yet.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
                 color: AppTheme.textSecondary,
-                height: 1.4,
               ),
             ),
             const SizedBox(height: 20),
@@ -634,13 +662,13 @@ class _RecordsScreenState extends State<RecordsScreen> with SingleTickerProvider
         itemBuilder: (context, index) {
           final item = records[index];
           return RecordCard(
-            title: item['title']!,
-            machineName: item['machineName']!,
-            recordType: item['recordType']!,
-            status: item['status']!,
-            timestamp: item['timestamp']!,
-            description: item['description']!,
-            reportedBy: item['reportedBy']!,
+            title: (item['title'] ?? '').toString(),
+            machineName: (item['machineName'] ?? '').toString(),
+            recordType: (item['recordType'] ?? '').toString(),
+            status: (item['status'] ?? '').toString(),
+            timestamp: (item['timestamp'] ?? '').toString(),
+            description: (item['description'] ?? '').toString(),
+            reportedBy: (item['reportedBy'] ?? '').toString(),
             onTap: () => _handleRecordTap(item, index),
           );
         },

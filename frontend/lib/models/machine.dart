@@ -62,6 +62,9 @@ class Machine {
     return lastInspected;
   }
 
+  /// Returns a non-null display value for last inspection.
+  String get displayLastInspected => formattedLastInspected ?? 'Never';
+
   /// Factory constructor to parse data from a Map.
   factory Machine.fromMap(Map<String, dynamic> map, {String id = ''}) {
     DateTime? parsedLastInspectedAt;

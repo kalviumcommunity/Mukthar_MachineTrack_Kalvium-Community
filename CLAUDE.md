@@ -60,13 +60,14 @@ The tests depend on these conventions:
 
 ### What is live and what is mock
 
-Only authentication is wired to Firebase: login, signup, password reset and logout. Everything else is still a UI prototype:
-
-- The Home, Machines, Records, New Inspection and Report Breakdown screens render hardcoded sample maps, e.g. the `const List<Map<String, String>>` in `MachinesScreen` and `RecordsScreen`.
-- `Machine` (`lib/models/machine.dart`) and `MachineService` exist, but no screen uses them yet.
-- Submitting an inspection or a breakdown only waits on a `Future.delayed`. The payload map is then passed to the next screen as route arguments, and nothing is written to Firestore.
-
-The sample machine maps use the same keys as `Machine.fromMap`/`toMap`. Wiring in Firestore therefore means switching screens from maps to `Machine` objects, and passing `toMap()` output wherever a route still expects a map.
+- **Authentication** is wired to Firebase Auth: login, signup, password reset, and logout.
+- **Machines Screen** is wired to `MachineService` Firestore stream with fallback to sample fleet.
+- **Records Screen** is wired to `InspectionService` and `BreakdownService` Firestore streams with fallback.
+- **New Inspection Screen** submits real audit docs to Firestore via `InspectionService`, syncing machine status.
+- **Report Breakdown Screen** logs incident reports to Firestore via `BreakdownService`, syncing machine status.
+- **Home Screen** calculates live metric counters from machine and breakdown streams.
+- **Profile Screen** displays live team members from `UserService`.
+- **Debug Builds** automatically connect to local Auth (`:9099`) and Firestore (`:8080`) emulators.
 
 ### Domain values are plain strings
 

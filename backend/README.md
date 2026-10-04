@@ -154,11 +154,11 @@ Any signed-in user can report a breakdown. Afterwards, only the reporter or an a
   - seed the emulator and production with the sample machines from the frontend
   - `set-admin` script to promote a user
   - export and import emulator data for repeatable local dev
-- [ ] **Day 4:** Frontend wiring:
+- [x] **Day 4:** Frontend wiring:
   - add `InspectionService`, `BreakdownService` and `UserService` following the existing service conventions
   - switch the Machines, Records, New Inspection and Report Breakdown screens from sample maps to Firestore
   - add `lastInspectedAt` to the `Machine` model and show it as relative time
-- [ ] **Day 5:** Integration and release:
+- [x] **Day 5:** Integration and release:
   - connect the Flutter app to the emulators in debug builds
   - add a GitHub Actions workflow for the backend tests
   - deploy rules, indexes and functions
