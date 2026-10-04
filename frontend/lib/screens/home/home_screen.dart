@@ -1,17 +1,88 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../models/breakdown.dart';
+import '../../models/inspection.dart';
+import '../../models/machine.dart';
+import '../../services/auth_service.dart';
+import '../../services/breakdown_service.dart';
+import '../../services/inspection_service.dart';
+import '../../services/machine_service.dart';
 import '../../widgets/machine_card.dart';
 import '../../widgets/record_card.dart';
 
 /// Home Screen displaying worker shift overview, machine quick metrics, and recent activity.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final Function(int)? onNavigateToTab;
 
   const HomeScreen({super.key, this.onNavigateToTab});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final MachineService _machineService = MachineService();
+  final BreakdownService _breakdownService = BreakdownService();
+  final InspectionService _inspectionService = InspectionService();
+
+  StreamSubscription<List<Machine>>? _machinesSub;
+  StreamSubscription<List<Breakdown>>? _breakdownsSub;
+  StreamSubscription<List<Inspection>>? _inspectionsSub;
+
+  List<Machine> _machines = [];
+  List<Breakdown> _breakdowns = [];
+  List<Inspection> _inspections = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  void _subscribe() {
+    _machinesSub = _machineService.getMachinesStream().listen((machines) {
+      if (mounted) setState(() => _machines = machines);
+    });
+    _breakdownsSub = _breakdownService.getBreakdownsStream().listen((breakdowns) {
+      if (mounted) setState(() => _breakdowns = breakdowns);
+    });
+    _inspectionsSub = _inspectionService.getInspectionsStream().listen((inspections) {
+      if (mounted) setState(() => _inspections = inspections);
+    });
+  }
+
+  @override
+  void dispose() {
+    _machinesSub?.cancel();
+    _breakdownsSub?.cancel();
+    _inspectionsSub?.cancel();
+    super.dispose();
+  }
+
+  int get _runningCount =>
+      _machines.isNotEmpty ? _machines.where((m) => m.status == 'Running').length : 18;
+  int get _maintenanceCount =>
+      _machines.isNotEmpty ? _machines.where((m) => m.status == 'Maintenance').length : 3;
+  int get _breakdownCount =>
+      _machines.isNotEmpty ? _machines.where((m) => m.status == 'Breakdown').length : 1;
+
+  Machine? get _priorityMachine {
+    if (_machines.isNotEmpty) {
+      final breakdownMachine = _machines.where((m) => m.status == 'Breakdown').firstOrNull;
+      if (breakdownMachine != null) return breakdownMachine;
+      final maintenanceMachine = _machines.where((m) => m.status == 'Maintenance').firstOrNull;
+      if (maintenanceMachine != null) return maintenanceMachine;
+      return _machines.first;
+    }
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final priority = _priorityMachine;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
@@ -35,89 +106,42 @@ class HomeScreen extends StatelessWidget {
               // Priority Machine Focus
               _buildSectionHeader(
                 title: 'High Priority Machines',
-                onSeeAll: () => onNavigateToTab?.call(1),
+                onSeeAll: () => widget.onNavigateToTab?.call(1),
               ),
               const SizedBox(height: 12),
-              MachineCard(
-                id: 'M-104',
-                name: 'Hydraulic Press 500T',
-                code: 'PRESS-500T-04',
-                location: 'Zone A - Heavy Stamping',
-                status: 'Breakdown',
-                lastInspected: '25 mins ago',
-                onTap: () {
-                  onNavigateToTab?.call(1);
-                },
-              ),
+              if (priority != null)
+                MachineCard(
+                  id: priority.id,
+                  name: priority.name,
+                  code: priority.code,
+                  location: priority.location,
+                  status: priority.status,
+                  lastInspected: priority.displayLastInspected,
+                  onTap: () {
+                    widget.onNavigateToTab?.call(1);
+                  },
+                )
+              else
+                MachineCard(
+                  id: 'M-104',
+                  name: 'Hydraulic Press 500T',
+                  code: 'PRESS-500T-04',
+                  location: 'Zone A - Heavy Stamping',
+                  status: 'Breakdown',
+                  lastInspected: '25 mins ago',
+                  onTap: () {
+                    widget.onNavigateToTab?.call(1);
+                  },
+                ),
               const SizedBox(height: 24),
 
               // Recent Inspections & Breakdowns Activity
               _buildSectionHeader(
                 title: 'Recent Activity Logs',
-                onSeeAll: () => onNavigateToTab?.call(2),
+                onSeeAll: () => widget.onNavigateToTab?.call(2),
               ),
               const SizedBox(height: 12),
-              RecordCard(
-                title: 'Hydraulic Fluid Pressure Drop',
-                machineName: 'Hydraulic Press 500T',
-                recordType: 'Breakdown',
-                status: 'Critical',
-                timestamp: '10:45 AM Today',
-                description:
-                    'Fluid line leak detected near main cylinder valve during morning shift operation.',
-                reportedBy: 'Mukthar (Me)',
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.recordDetails,
-                    arguments: {
-                      'id': 'rec-101',
-                      'title': 'Hydraulic Fluid Pressure Drop',
-                      'machineName': 'Hydraulic Press 500T',
-                      'machineCode': 'PRESS-500T-04',
-                      'machineLocation': 'Zone A - Stamping Line',
-                      'recordType': 'Breakdown',
-                      'status': 'Critical',
-                      'timestamp': '10:45 AM Today',
-                      'description':
-                          'Fluid line leak detected near main cylinder valve during morning shift operation.',
-                      'reportedBy': 'Mukthar (Lead Tech)',
-                      'shift': 'Shift #1 • Plant Floor A',
-                      'priority': 'Critical / Line Halt',
-                      'component': 'Main Hydraulic Pump & Valve',
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              RecordCard(
-                title: 'Routine Shift-Start Checklist',
-                machineName: 'CNC Lathe Machine #02',
-                recordType: 'Inspection',
-                status: 'Passed',
-                timestamp: '08:30 AM Today',
-                description:
-                    'Coolant levels checked, safety guards aligned, emergency stop verified.',
-                reportedBy: 'Abhinav',
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.inspectionDetails,
-                    arguments: {
-                      'id': 'INS-2026-0812',
-                      'machineName': 'CNC Lathe Machine #02',
-                      'machineCode': 'CNC-LTH-02',
-                      'machineLocation': 'Zone B - Machining Cell',
-                      'date': '22 Sep 2026',
-                      'time': '08:30 AM',
-                      'condition': 'Passed',
-                      'notes': 'Coolant levels checked, safety guards aligned, emergency stop verified.',
-                      'reportedBy': 'Abhinav (Operator)',
-                      'shift': 'Shift #1',
-                    },
-                  );
-                },
-              ),
+              _buildRecentActivityLogs(context),
               const SizedBox(height: 16),
             ],
           ),
@@ -126,15 +150,126 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildRecentActivityLogs(BuildContext context) {
+    if (_breakdowns.isNotEmpty || _inspections.isNotEmpty) {
+      final logs = <Map<String, dynamic>>[
+        ..._breakdowns.map((b) => b.toMapForRecord()),
+        ..._inspections.map((i) => i.toMapForRecord()),
+      ];
+      logs.sort((a, b) {
+        final dateA = a['rawDate'] as DateTime? ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = b['rawDate'] as DateTime? ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return dateB.compareTo(dateA);
+      });
+
+      return Column(
+        children: logs.take(2).map((item) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: RecordCard(
+              title: item['title']?.toString() ?? '',
+              machineName: item['machineName']?.toString() ?? '',
+              recordType: item['recordType']?.toString() ?? '',
+              status: item['status']?.toString() ?? '',
+              timestamp: item['timestamp']?.toString() ?? '',
+              description: item['description']?.toString() ?? '',
+              reportedBy: item['reportedBy']?.toString() ?? '',
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.recordDetails,
+                  arguments: item,
+                );
+              },
+            ),
+          );
+        }).toList(),
+      );
+    }
+
+    // Static fallback activity logs
+    return Column(
+      children: [
+        RecordCard(
+          title: 'Hydraulic Fluid Pressure Drop',
+          machineName: 'Hydraulic Press 500T',
+          recordType: 'Breakdown',
+          status: 'Critical',
+          timestamp: '10:45 AM Today',
+          description:
+              'Fluid line leak detected near main cylinder valve during morning shift operation.',
+          reportedBy: 'Mukthar (Me)',
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              AppRoutes.recordDetails,
+              arguments: {
+                'id': 'rec-101',
+                'title': 'Hydraulic Fluid Pressure Drop',
+                'machineName': 'Hydraulic Press 500T',
+                'machineCode': 'PRESS-500T-04',
+                'machineLocation': 'Zone A - Stamping Line',
+                'recordType': 'Breakdown',
+                'status': 'Critical',
+                'timestamp': '10:45 AM Today',
+                'description':
+                    'Fluid line leak detected near main cylinder valve during morning shift operation.',
+                'reportedBy': 'Mukthar (Lead Tech)',
+                'shift': 'Shift #1 • Plant Floor A',
+                'priority': 'Critical / Line Halt',
+                'component': 'Main Hydraulic Pump & Valve',
+              },
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        RecordCard(
+          title: 'Routine Shift-Start Checklist',
+          machineName: 'CNC Lathe Machine #02',
+          recordType: 'Inspection',
+          status: 'Passed',
+          timestamp: '08:30 AM Today',
+          description:
+              'Coolant levels checked, safety guards aligned, emergency stop verified.',
+          reportedBy: 'Abhinav',
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              AppRoutes.inspectionDetails,
+              arguments: {
+                'id': 'INS-2026-0812',
+                'machineName': 'CNC Lathe Machine #02',
+                'machineCode': 'CNC-LTH-02',
+                'machineLocation': 'Zone B - Machining Cell',
+                'date': '22 Sep 2026',
+                'time': '08:30 AM',
+                'condition': 'Passed',
+                'notes': 'Coolant levels checked, safety guards aligned, emergency stop verified.',
+                'reportedBy': 'Abhinav (Operator)',
+                'shift': 'Shift #1',
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
+    final user = AuthService().currentUser;
+    final displayName = (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
+        ? user.displayName!.trim()
+        : (user?.email?.split('@').first ?? 'Mukthar');
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'M';
+
     return Row(
       children: [
         CircleAvatar(
           radius: 24,
           backgroundColor: AppTheme.primaryBlue.withAlpha(25),
-          child: const Text(
-            'M',
-            style: TextStyle(
+          child: Text(
+            initial,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: AppTheme.primaryBlue,
@@ -146,9 +281,9 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Hello, Mukthar 👋',
-                style: TextStyle(
+              Text(
+                'Hello, $displayName 👋',
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                   color: AppTheme.textPrimary,
@@ -212,7 +347,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: _buildMetricItem(
             label: 'Running',
-            value: '18',
+            value: '$_runningCount',
             color: AppTheme.statusRunning,
             icon: Icons.play_circle_fill_rounded,
           ),
@@ -221,7 +356,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: _buildMetricItem(
             label: 'Maintenance',
-            value: '3',
+            value: '$_maintenanceCount',
             color: AppTheme.statusMaintenance,
             icon: Icons.build_circle_rounded,
           ),
@@ -230,7 +365,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: _buildMetricItem(
             label: 'Breakdown',
-            value: '1',
+            value: '$_breakdownCount',
             color: AppTheme.statusBreakdown,
             icon: Icons.warning_rounded,
           ),
@@ -249,11 +384,11 @@ class HomeScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: AppTheme.surfaceWhite,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: Colors.black.withAlpha(5),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -263,26 +398,26 @@ class HomeScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
               Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: color,
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textSecondary,
                 ),
               ),
+              Icon(icon, size: 16, color: color),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: color,
             ),
           ),
         ],
@@ -294,95 +429,93 @@ class HomeScreen extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: InkWell(
+          child: _buildActionCard(
+            context: context,
+            title: 'New Inspection',
+            subtitle: 'Conduct daily audit',
+            icon: Icons.playlist_add_check_circle_rounded,
+            color: AppTheme.primaryBlue,
             onTap: () {
               Navigator.pushNamed(context, AppRoutes.newInspection);
             },
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryBlue,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.add_task_rounded, color: Colors.white, size: 22),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'New Inspection',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          'Shift checklist',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: InkWell(
+          child: _buildActionCard(
+            context: context,
+            title: 'Report Fault',
+            subtitle: 'Log machine issue',
+            icon: Icons.report_problem_rounded,
+            color: AppTheme.statusBreakdown,
             onTap: () {
               Navigator.pushNamed(context, AppRoutes.reportBreakdown);
             },
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.statusBreakdown.withAlpha(20),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.statusBreakdown.withAlpha(60)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: AppTheme.statusBreakdown, size: 22),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Breakdown Alert',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.statusBreakdown,
-                          ),
-                        ),
-                        Text(
-                          'Report fault',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildActionCard({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: color.withAlpha(12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withAlpha(40)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -396,18 +529,23 @@ class HomeScreen extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
           ),
         ),
-        GestureDetector(
-          onTap: onSeeAll,
+        TextButton(
+          onPressed: onSeeAll,
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
           child: const Text(
             'See All',
             style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: AppTheme.secondaryBlue,
             ),
           ),

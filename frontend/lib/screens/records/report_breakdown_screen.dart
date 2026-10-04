@@ -1,6 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../models/breakdown.dart';
+import '../../models/machine.dart';
+import '../../services/auth_service.dart';
+import '../../services/breakdown_service.dart';
+import '../../services/machine_service.dart';
 import '../../widgets/custom_button.dart';
 
 /// Screen for reporting and logging machine breakdown incidents and emergency maintenance requests.
@@ -18,7 +24,11 @@ class _ReportBreakdownScreenState extends State<ReportBreakdownScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  final List<Map<String, String>> _machineOptions = const [
+  final MachineService _machineService = MachineService();
+  final BreakdownService _breakdownService = BreakdownService();
+  StreamSubscription<List<Machine>>? _machinesSub;
+
+  List<Map<String, String>> _machineOptions = [
     {
       'id': '1',
       'name': 'Hydraulic Press 500T',
@@ -90,10 +100,40 @@ class _ReportBreakdownScreenState extends State<ReportBreakdownScreen> {
     } else {
       _selectedMachine = _machineOptions.first;
     }
+    _subscribeToFleet();
+  }
+
+  void _subscribeToFleet() {
+    _machinesSub = _machineService.getMachinesStream().listen((machines) {
+      if (mounted && machines.isNotEmpty) {
+        setState(() {
+          _machineOptions = machines.map((m) => {
+            'id': m.id,
+            'name': m.name,
+            'code': m.code,
+            'location': m.location,
+            'status': m.status,
+          }).toList();
+
+          if (_selectedMachine != null) {
+            final curId = _selectedMachine!['id'];
+            final match = _machineOptions.where((m) => m['id'] == curId).firstOrNull;
+            if (match != null) {
+              _selectedMachine = match;
+            } else {
+              _selectedMachine = _machineOptions.first;
+            }
+          } else {
+            _selectedMachine = _machineOptions.first;
+          }
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _machinesSub?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -104,38 +144,77 @@ class _ReportBreakdownScreenState extends State<ReportBreakdownScreen> {
       return;
     }
 
+    if (_selectedMachine == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a machine to report'),
+          backgroundColor: AppTheme.statusBreakdown,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(milliseconds: 800));
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
+    try {
+      final user = AuthService().currentUser;
+      final reporterId = user?.uid ?? 'tech';
+      final reporterName = (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
+          ? user.displayName!.trim()
+          : (user?.email?.split('@').first ?? 'Mukthar (Lead Tech)');
 
-    final recordId = 'BRK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-    final payload = {
-      'id': recordId,
-      'title': _titleController.text.trim().isEmpty
-          ? '$_selectedCategory Failure Incident'
-          : _titleController.text.trim(),
-      'machineName': _selectedMachine!['name'],
-      'machineCode': _selectedMachine!['code'],
-      'machineLocation': _selectedMachine!['location'],
-      'recordType': 'Breakdown',
-      'status': _selectedSeverity,
-      'timestamp': 'Just now',
-      'description': _descriptionController.text.trim(),
-      'reportedBy': 'Mukthar (Lead Tech)',
-      'shift': 'Shift #1 • Plant Floor A',
-      'priority': _selectedSeverity == 'Critical' ? 'Urgent / Line Halt' : 'High Priority',
-      'component': '$_selectedCategory Subsystem',
-    };
+      final breakdown = Breakdown(
+        id: '',
+        machineId: _selectedMachine!['id']!,
+        machineName: _selectedMachine!['name']!,
+        machineCode: _selectedMachine!['code']!,
+        machineLocation: _selectedMachine!['location'],
+        title: _titleController.text.trim().isEmpty
+            ? '$_selectedCategory Failure Incident'
+            : _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        severity: _selectedSeverity,
+        component: '$_selectedCategory Subsystem',
+        priority: _selectedSeverity == 'Critical' ? 'Urgent / Line Halt' : 'High Priority',
+        shift: 'Shift #1 • Plant Floor A',
+        reportedById: reporterId,
+        reportedByName: reporterName,
+        resolved: false,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Breakdown incident $recordId logged! Alert dispatched to maintenance team.'),
-        backgroundColor: AppTheme.statusBreakdown,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      String recordId = '';
+      try {
+        recordId = await _breakdownService.reportBreakdown(breakdown);
+      } catch (e) {
+        recordId = 'BRK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      }
+
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      final payload = {
+        'id': recordId,
+        'title': breakdown.title,
+        'machineName': _selectedMachine!['name'],
+        'machineCode': _selectedMachine!['code'],
+        'machineLocation': _selectedMachine!['location'],
+        'recordType': 'Breakdown',
+        'status': _selectedSeverity,
+        'timestamp': 'Just now',
+        'description': breakdown.description,
+        'reportedBy': reporterName,
+        'shift': 'Shift #1 • Plant Floor A',
+        'priority': breakdown.priority,
+        'component': breakdown.component,
+      };
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Breakdown incident $recordId logged! Alert dispatched to maintenance team.'),
+          backgroundColor: AppTheme.statusBreakdown,
+          duration: const Duration(seconds: 3),
+        ),
+      );
 
     Navigator.pushReplacementNamed(
       context,

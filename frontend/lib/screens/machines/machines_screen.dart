@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../models/machine.dart';
+import '../../services/machine_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/machine_card.dart';
 
-/// Machines Screen displaying factory machine inventory with combined search, status filtering, and sorting.
+/// Machines Screen for factory inventory browsing, searching, and filtering.
 class MachinesScreen extends StatefulWidget {
   const MachinesScreen({super.key});
 
@@ -20,74 +23,111 @@ class _MachinesScreenState extends State<MachinesScreen> {
   bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
 
-  // Sample Static Machine Dataset
-  final List<Map<String, String>> _allMachines = const [
-    {
-      'id': '1',
-      'name': 'Hydraulic Press 500T',
-      'code': 'PRESS-500T-04',
-      'location': 'Zone A - Stamping Line',
-      'status': 'Breakdown',
-      'lastInspected': '25 mins ago',
-      'model': 'StamperPro 500',
-      'serialNumber': 'SN-99812-A',
-      'assignedTech': 'Mukthar',
-    },
-    {
-      'id': '2',
-      'name': 'CNC Lathe Machine #02',
-      'code': 'CNC-LTH-02',
-      'location': 'Zone B - Machining Cell',
-      'status': 'Running',
-      'lastInspected': '2 hours ago',
-      'model': 'LatheMatic 3000',
-      'serialNumber': 'SN-44310-B',
-      'assignedTech': 'Abhinav',
-    },
-    {
-      'id': '3',
-      'name': 'Automated Conveyor Belt #05',
-      'code': 'CNV-BELT-05',
-      'location': 'Zone C - Packaging Line',
-      'status': 'Maintenance',
-      'lastInspected': 'Yesterday',
-      'model': 'ConveyX Ultra',
-      'serialNumber': 'SN-11204-C',
-      'assignedTech': 'Steve',
-    },
-    {
-      'id': '4',
-      'name': 'Robotic Welding Arm Alpha',
-      'code': 'ROB-WLD-01',
-      'location': 'Zone A - Welding Bay',
-      'status': 'Running',
-      'lastInspected': '3 hours ago',
-      'model': 'WeldBot 900',
-      'serialNumber': 'SN-77291-A',
-      'assignedTech': 'Mukthar',
-    },
-    {
-      'id': '5',
-      'name': 'Injection Molding Unit #03',
-      'code': 'INJ-MLD-03',
-      'location': 'Zone D - Plastics Sector',
-      'status': 'Idle',
-      'lastInspected': '3 days ago',
-      'model': 'MoldMaster Pro',
-      'serialNumber': 'SN-55612-D',
-      'assignedTech': 'Abhinav',
-    },
+  final MachineService _machineService = MachineService();
+  StreamSubscription<List<Machine>>? _machinesSub;
+  List<Machine> _firestoreMachines = [];
+
+  // Static Fallback Dataset (used if Firestore is empty or uninitialized)
+  static final List<Machine> _sampleMachines = const [
+    Machine(
+      id: '1',
+      name: 'Hydraulic Press 500T',
+      code: 'PRESS-500T-04',
+      location: 'Zone A - Stamping Line',
+      status: 'Breakdown',
+      lastInspected: '25 mins ago',
+      model: 'StamperPro 500',
+      serialNumber: 'SN-99812-A',
+      assignedTech: 'Mukthar',
+    ),
+    Machine(
+      id: '2',
+      name: 'CNC Lathe Machine #02',
+      code: 'CNC-LTH-02',
+      location: 'Zone B - Machining Cell',
+      status: 'Running',
+      lastInspected: '2 hours ago',
+      model: 'LatheMatic 3000',
+      serialNumber: 'SN-44310-B',
+      assignedTech: 'Abhinav',
+    ),
+    Machine(
+      id: '3',
+      name: 'Automated Conveyor Belt #05',
+      code: 'CNV-BELT-05',
+      location: 'Zone C - Packaging Line',
+      status: 'Maintenance',
+      lastInspected: 'Yesterday',
+      model: 'ConveyX Ultra',
+      serialNumber: 'SN-11204-C',
+      assignedTech: 'Steve',
+    ),
+    Machine(
+      id: '4',
+      name: 'Robotic Welding Arm Alpha',
+      code: 'ROB-WLD-01',
+      location: 'Zone A - Welding Bay',
+      status: 'Running',
+      lastInspected: '3 hours ago',
+      model: 'WeldBot 900',
+      serialNumber: 'SN-77291-A',
+      assignedTech: 'Mukthar',
+    ),
+    Machine(
+      id: '5',
+      name: 'Injection Molding Unit #03',
+      code: 'INJ-MLD-03',
+      location: 'Zone D - Plastics Sector',
+      status: 'Idle',
+      lastInspected: '3 days ago',
+      model: 'MoldMaster Pro',
+      serialNumber: 'SN-55612-D',
+      assignedTech: 'Abhinav',
+    ),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _subscribeToMachines();
+  }
+
+  void _subscribeToMachines() {
+    _machinesSub = _machineService.getMachinesStream().listen((machines) {
+      if (mounted) {
+        setState(() {
+          _firestoreMachines = machines;
+        });
+      }
+    });
+  }
+
+  List<Machine> get _currentMachines {
+    if (_firestoreMachines.isNotEmpty) {
+      return _firestoreMachines;
+    }
+    return _sampleMachines;
+  }
+
+  @override
   void dispose() {
+    _machinesSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _refreshMachines() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      final machines = await _machineService.getMachines();
+      if (mounted && machines.isNotEmpty) {
+        setState(() {
+          _firestoreMachines = machines;
+        });
+      }
+    } catch (_) {
+      // Quiet fallback preserves existing state
+    }
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -109,27 +149,27 @@ class _MachinesScreenState extends State<MachinesScreen> {
       _searchQuery.isNotEmpty ||
       _sortBy != 'Name';
 
-  List<Map<String, String>> get _filteredMachines {
-    final list = _allMachines.where((m) {
+  List<Machine> get _filteredMachines {
+    final list = _currentMachines.where((m) {
       final matchesStatus = _selectedFilter == 'All' ||
-          m['status']!.toLowerCase() == _selectedFilter.toLowerCase();
+          m.status.toLowerCase() == _selectedFilter.toLowerCase();
       final matchesZone = _selectedZone == 'All Zones' ||
-          m['location']!.toLowerCase().contains(_selectedZone.toLowerCase().replaceAll('zone ', ''));
+          m.location.toLowerCase().contains(_selectedZone.toLowerCase().replaceAll('zone ', ''));
       final query = _searchQuery.toLowerCase();
       final matchesSearch = query.isEmpty ||
-          m['name']!.toLowerCase().contains(query) ||
-          m['code']!.toLowerCase().contains(query) ||
-          m['location']!.toLowerCase().contains(query) ||
-          (m['assignedTech']?.toLowerCase().contains(query) ?? false);
+          m.name.toLowerCase().contains(query) ||
+          m.code.toLowerCase().contains(query) ||
+          m.location.toLowerCase().contains(query) ||
+          (m.assignedTech?.toLowerCase().contains(query) ?? false);
       return matchesStatus && matchesZone && matchesSearch;
     }).toList();
 
     if (_sortBy == 'Status') {
-      list.sort((a, b) => a['status']!.compareTo(b['status']!));
+      list.sort((a, b) => a.status.compareTo(b.status));
     } else if (_sortBy == 'Location') {
-      list.sort((a, b) => a['location']!.compareTo(b['location']!));
+      list.sort((a, b) => a.location.compareTo(b.location));
     } else {
-      list.sort((a, b) => a['name']!.compareTo(b['name']!));
+      list.sort((a, b) => a.name.compareTo(b.name));
     }
 
     return list;
@@ -144,21 +184,26 @@ class _MachinesScreenState extends State<MachinesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
+      builder: (BuildContext ctx) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (BuildContext context, StateSetter setModalState) {
             return Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               decoration: const BoxDecoration(
                 color: AppTheme.surfaceWhite,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              child: SafeArea(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Handle Bar
+                    // Sheet Header Drag Handle
                     Center(
                       child: Container(
                         width: 40,
@@ -171,12 +216,12 @@ class _MachinesScreenState extends State<MachinesScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Title & Reset Header
+                    // Sheet Title
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Filter & Sort Machines',
+                          'Filter & Sort Fleet',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -194,9 +239,9 @@ class _MachinesScreenState extends State<MachinesScreen> {
                           child: const Text(
                             'Reset All',
                             style: TextStyle(
-                              fontSize: 13,
+                              color: AppTheme.statusBreakdown,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.secondaryBlue,
+                              fontSize: 13,
                             ),
                           ),
                         ),
@@ -446,7 +491,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Showing ${filteredList.length} of ${_allMachines.length} machines',
+                      'Showing ${filteredList.length} of ${_currentMachines.length} machines',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -487,17 +532,17 @@ class _MachinesScreenState extends State<MachinesScreen> {
                               itemBuilder: (context, index) {
                                 final item = filteredList[index];
                                 return MachineCard(
-                                  id: item['id']!,
-                                  name: item['name']!,
-                                  code: item['code']!,
-                                  location: item['location']!,
-                                  status: item['status']!,
-                                  lastInspected: item['lastInspected'],
+                                  id: item.id,
+                                  name: item.name,
+                                  code: item.code,
+                                  location: item.location,
+                                  status: item.status,
+                                  lastInspected: item.displayLastInspected,
                                   onTap: () {
                                     Navigator.pushNamed(
                                       context,
                                       AppRoutes.machineDetails,
-                                      arguments: item,
+                                      arguments: item.toMap()..['id'] = item.id,
                                     );
                                   },
                                 );
@@ -549,17 +594,15 @@ class _MachinesScreenState extends State<MachinesScreen> {
           style: const TextStyle(
             fontSize: 13,
             color: AppTheme.textSecondary,
-            height: 1.4,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         Center(
           child: SizedBox(
-            width: 200,
+            width: 160,
             child: CustomButton(
-              text: 'Reset Filters & Search',
+              text: 'Clear Filters',
               isOutlined: true,
-              icon: Icons.refresh_rounded,
               onPressed: _resetSearchAndFilters,
             ),
           ),
