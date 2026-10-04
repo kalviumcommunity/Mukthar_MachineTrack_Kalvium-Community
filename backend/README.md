@@ -21,10 +21,30 @@ You need Node 20 or newer and Java 21 or newer, because the Firestore emulator n
 cd backend
 npm install
 npm install --prefix functions
-npm test                # test:rules, then test:functions
+npm test                # all tests (rules, functions, and admin scripts)
 npm run test:rules      # security rules on the Firestore emulator
-npm run test:functions  # function unit tests, then triggers on the Auth + Firestore + Functions emulators
+npm run test:functions  # function unit tests, then triggers on the emulators
+npm run test:scripts    # tests for seed and set-admin scripts
 npm run emulators       # builds functions, starts all emulators, UI at http://localhost:4000
+npm run emulators:data  # starts emulators importing ./emulator-data and exporting on exit
+npm run emulators:export # exports current emulator state to ./emulator-data
+```
+
+### Admin Scripts
+
+Scripts to manage machines and user roles live in `scripts/`:
+
+```bash
+# Seeding machines (sample fleet from frontend)
+npm run seed             # seed to local emulator (demo-machinetrack)
+npm run seed:prod        # seed to live production (machinetrack-701bd)
+node scripts/seed-machines.js --clear  # wipe existing fleet before seeding
+
+# Role management (updates Firestore profile and Auth custom claims)
+npm run set-admin -- user@factory.com        # promote user on emulator
+npm run set-admin:prod -- user@factory.com   # promote user on production
+npm run set-admin -- <uid>                   # promote by Auth UID
+npm run set-admin -- user@factory.com --revoke  # demote back to technician
 ```
 
 The emulators use the `demo-machinetrack` project ID, so local runs never touch production data.
@@ -130,7 +150,7 @@ Any signed-in user can report a breakdown. Afterwards, only the reporter or an a
   - set machine `status` when a breakdown is reported or resolved
   - update `lastInspectedAt`/`status` after an inspection
   - unit tests for the status rules, and end-to-end trigger tests on the emulators
-- [ ] **Day 3:** Admin scripts:
+- [x] **Day 3:** Admin scripts:
   - seed the emulator and production with the sample machines from the frontend
   - `set-admin` script to promote a user
   - export and import emulator data for repeatable local dev

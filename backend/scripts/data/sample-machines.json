@@ -1,0 +1,57 @@
+[
+  {
+    "id": "1",
+    "name": "Hydraulic Press 500T",
+    "code": "PRESS-500T-04",
+    "location": "Zone A - Stamping Line",
+    "status": "Breakdown",
+    "lastInspected": "25 mins ago",
+    "model": "StamperPro 500",
+    "serialNumber": "SN-99812-A",
+    "assignedTech": "Mukthar"
+  },
+  {
+    "id": "2",
+    "name": "CNC Lathe Machine #02",
+    "code": "CNC-LTH-02",
+    "location": "Zone B - Machining Cell",
+    "status": "Running",
+    "lastInspected": "2 hours ago",
+    "model": "LatheMatic 3000",
+    "serialNumber": "SN-44310-B",
+    "assignedTech": "Abhinav"
+  },
+  {
+    "id": "3",
+    "name": "Automated Conveyor Belt #05",
+    "code": "CNV-BELT-05",
+    "location": "Zone C - Packaging Line",
+    "status": "Maintenance",
+    "lastInspected": "Yesterday",
+    "model": "ConveyX Ultra",
+    "serialNumber": "SN-11204-C",
+    "assignedTech": "Steve"
+  },
+  {
+    "id": "4",
+    "name": "Robotic Welding Arm Alpha",
+    "code": "ROB-WLD-01",
+    "location": "Zone A - Welding Bay",
+    "status": "Running",
+    "lastInspected": "3 hours ago",
+    "model": "WeldBot 900",
+    "serialNumber": "SN-77291-A",
+    "assignedTech": "Mukthar"
+  },
+  {
+    "id": "5",
+    "name": "Injection Molding Unit #03",
+    "code": "INJ-MLD-03",
+    "location": "Zone D - Plastics Sector",
+    "status": "Idle",
+    "lastInspected": "3 days ago",
+    "model": "MoldMaster Pro",
+    "serialNumber": "SN-55612-D",
+    "assignedTech": "Abhinav"
+  }
+]
