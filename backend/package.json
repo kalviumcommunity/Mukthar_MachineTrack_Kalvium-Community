@@ -8,9 +8,16 @@
   },
   "scripts": {
     "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-machinetrack",
-    "test": "npm run test:rules && npm run test:functions",
+    "emulators:data": "npm --prefix functions run build && firebase emulators:start --project demo-machinetrack --import=./emulator-data --export-on-exit=./emulator-data",
+    "emulators:export": "firebase emulators:export ./emulator-data --force --project demo-machinetrack",
+    "seed": "node scripts/seed-machines.js",
+    "seed:prod": "node scripts/seed-machines.js --prod",
+    "set-admin": "node scripts/set-admin.js",
+    "set-admin:prod": "node scripts/set-admin.js --prod",
+    "test": "npm run test:rules && npm run test:functions && npm run test:scripts",
     "test:rules": "firebase emulators:exec --only firestore --project demo-machinetrack \"node --test tests/firestore.rules.test.js\"",
     "test:functions": "npm --prefix functions test && firebase emulators:exec --only auth,firestore,functions --project demo-machinetrack \"node --test tests/functions.test.js\"",
+    "test:scripts": "firebase emulators:exec --only auth,firestore --project demo-machinetrack \"node --test tests/scripts.test.js\"",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "deploy:functions": "firebase deploy --only functions"
   },
