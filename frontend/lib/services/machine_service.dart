@@ -13,8 +13,12 @@ class MachineService {
   CollectionReference<Map<String, dynamic>> get _collection =>
       _firestoreService.machinesCollection;
 
+  /// Checks if Firestore is available in the current environment.
+  bool get isAvailable => _firestoreService.isAvailable;
+
   /// Fetches all machines from Firestore once.
   Future<List<Machine>> getMachines() async {
+    if (!isAvailable) return [];
     try {
       final snapshot = await _collection.get();
       return snapshot.docs.map((doc) => Machine.fromFirestore(doc)).toList();
@@ -27,7 +31,7 @@ class MachineService {
 
   /// Fetches a single machine by document ID.
   Future<Machine?> getMachineById(String id) async {
-    if (id.trim().isEmpty) return null;
+    if (id.trim().isEmpty || !isAvailable) return null;
     try {
       final doc = await _collection.doc(id.trim()).get();
       if (!doc.exists) return null;
@@ -41,6 +45,7 @@ class MachineService {
 
   /// Real-time stream of all machines in Firestore.
   Stream<List<Machine>> getMachinesStream() {
+    if (!isAvailable) return const Stream.empty();
     try {
       return _collection.snapshots().map((snapshot) {
         return snapshot.docs.map((doc) => Machine.fromFirestore(doc)).toList();
@@ -52,7 +57,7 @@ class MachineService {
 
   /// Real-time stream of a single machine by document ID.
   Stream<Machine?> getMachineStream(String id) {
-    if (id.trim().isEmpty) return const Stream.empty();
+    if (id.trim().isEmpty || !isAvailable) return const Stream.empty();
     try {
       return _collection.doc(id.trim()).snapshots().map((doc) {
         if (!doc.exists) return null;

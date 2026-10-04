@@ -120,29 +120,78 @@ void main() {
       expect(machine1, isNot(equals(machine3)));
     });
 
-    test('supports lastInspectedAt parsing, serialization, and relative time formatting', () {
-      final pastDate = DateTime.now().subtract(const Duration(minutes: 25));
-      final machine = Machine(
-        id: '1',
-        name: 'Lathe',
-        code: 'LTH-01',
-        location: 'Zone B',
-        lastInspectedAt: pastDate,
+    test('handles lastInspectedAt Timestamp correctly and formats relative time', () {
+      final now = DateTime(2026, 10, 3, 12, 0, 0);
+
+      // Just now (< 1 min)
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(seconds: 30)), clock: now),
+        equals('Just now'),
       );
 
-      expect(machine.lastInspectedAt, equals(pastDate));
-      expect(machine.displayLastInspected, equals('25 mins ago'));
+      // 25 mins ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(minutes: 25)), clock: now),
+        equals('25 mins ago'),
+      );
 
-      final map = machine.toMap();
-      expect(map.containsKey('lastInspectedAt'), isTrue);
+      // 1 min ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(minutes: 1)), clock: now),
+        equals('1 min ago'),
+      );
 
-      final now = DateTime(2026, 10, 4, 12, 0, 0);
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(seconds: 30)), now: now), equals('Just now'));
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(minutes: 1)), now: now), equals('1 min ago'));
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(hours: 2)), now: now), equals('2 hours ago'));
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(days: 1)), now: now), equals('Yesterday'));
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(days: 3)), now: now), equals('3 days ago'));
-      expect(Machine.formatRelativeTime(now.subtract(const Duration(days: 14)), now: now), equals('2 weeks ago'));
+      // 2 hours ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(hours: 2)), clock: now),
+        equals('2 hours ago'),
+      );
+
+      // 1 day ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(days: 1)), clock: now),
+        equals('Yesterday'),
+      );
+
+      // 3 days ago
+      expect(
+        Machine.formatRelativeTime(now.subtract(const Duration(days: 3)), clock: now),
+        equals('3 days ago'),
+      );
+
+      // 10 days ago (formatted date string)
+      final pastDate = DateTime(2026, 9, 23, 10, 0);
+      expect(
+        Machine.formatRelativeTime(pastDate, clock: now),
+        equals('23 Sep 2026'),
+      );
+    });
+
+    test('parses lastInspectedAt from various formats (DateTime, String, millis)', () {
+      final dt = DateTime(2026, 10, 3, 11, 30);
+      final mapWithIso = {
+        'id': 'M-1',
+        'name': 'Press',
+        'code': 'P-01',
+        'location': 'Zone A',
+        'lastInspectedAt': dt.toIso8601String(),
+      };
+      final machineFromIso = Machine.fromMap(mapWithIso);
+      expect(machineFromIso.lastInspectedAt, equals(dt));
+
+      final mapWithMillis = {
+        'id': 'M-2',
+        'name': 'Lathe',
+        'code': 'L-01',
+        'location': 'Zone B',
+        'lastInspectedAt': dt.millisecondsSinceEpoch,
+      };
+      final machineFromMillis = Machine.fromMap(mapWithMillis);
+      expect(machineFromMillis.lastInspectedAt, equals(dt));
+
+      final routeMap = machineFromIso.toRouteMap();
+      expect(routeMap['id'], equals('M-1'));
+      expect(routeMap['lastInspectedAt'], equals(dt.toIso8601String()));
     });
   });
 }

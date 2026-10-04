@@ -7,129 +7,103 @@ import '../../services/machine_service.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/machine_card.dart';
 
-/// Machines Screen for factory inventory browsing, searching, and filtering.
+/// Machines Screen displaying factory machine inventory with combined search, status filtering, and sorting.
 class MachinesScreen extends StatefulWidget {
-  const MachinesScreen({super.key});
+  final MachineService? machineService;
+
+  const MachinesScreen({super.key, this.machineService});
 
   @override
   State<MachinesScreen> createState() => _MachinesScreenState();
 }
 
 class _MachinesScreenState extends State<MachinesScreen> {
+  late final MachineService _machineService;
+  StreamSubscription<List<Machine>>? _machinesSubscription;
+
+  List<Machine> _allMachines = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
   String _selectedFilter = 'All';
   String _selectedZone = 'All Zones';
   String _sortBy = 'Name';
   String _searchQuery = '';
-  bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
-
-  final MachineService _machineService = MachineService();
-  StreamSubscription<List<Machine>>? _machinesSub;
-  List<Machine> _firestoreMachines = [];
-
-  // Static Fallback Dataset (used if Firestore is empty or uninitialized)
-  static final List<Machine> _sampleMachines = const [
-    Machine(
-      id: '1',
-      name: 'Hydraulic Press 500T',
-      code: 'PRESS-500T-04',
-      location: 'Zone A - Stamping Line',
-      status: 'Breakdown',
-      lastInspected: '25 mins ago',
-      model: 'StamperPro 500',
-      serialNumber: 'SN-99812-A',
-      assignedTech: 'Mukthar',
-    ),
-    Machine(
-      id: '2',
-      name: 'CNC Lathe Machine #02',
-      code: 'CNC-LTH-02',
-      location: 'Zone B - Machining Cell',
-      status: 'Running',
-      lastInspected: '2 hours ago',
-      model: 'LatheMatic 3000',
-      serialNumber: 'SN-44310-B',
-      assignedTech: 'Abhinav',
-    ),
-    Machine(
-      id: '3',
-      name: 'Automated Conveyor Belt #05',
-      code: 'CNV-BELT-05',
-      location: 'Zone C - Packaging Line',
-      status: 'Maintenance',
-      lastInspected: 'Yesterday',
-      model: 'ConveyX Ultra',
-      serialNumber: 'SN-11204-C',
-      assignedTech: 'Steve',
-    ),
-    Machine(
-      id: '4',
-      name: 'Robotic Welding Arm Alpha',
-      code: 'ROB-WLD-01',
-      location: 'Zone A - Welding Bay',
-      status: 'Running',
-      lastInspected: '3 hours ago',
-      model: 'WeldBot 900',
-      serialNumber: 'SN-77291-A',
-      assignedTech: 'Mukthar',
-    ),
-    Machine(
-      id: '5',
-      name: 'Injection Molding Unit #03',
-      code: 'INJ-MLD-03',
-      location: 'Zone D - Plastics Sector',
-      status: 'Idle',
-      lastInspected: '3 days ago',
-      model: 'MoldMaster Pro',
-      serialNumber: 'SN-55612-D',
-      assignedTech: 'Abhinav',
-    ),
-  ];
 
   @override
   void initState() {
     super.initState();
+    _machineService = widget.machineService ?? MachineService();
     _subscribeToMachines();
   }
 
   void _subscribeToMachines() {
-    _machinesSub = _machineService.getMachinesStream().listen((machines) {
-      if (mounted) {
-        setState(() {
-          _firestoreMachines = machines;
-        });
-      }
-    });
-  }
+    _machinesSubscription?.cancel();
 
-  List<Machine> get _currentMachines {
-    if (_firestoreMachines.isNotEmpty) {
-      return _firestoreMachines;
+    if (!_machineService.isAvailable) {
+      setState(() {
+        _isLoading = false;
+        _allMachines = [];
+      });
+      return;
     }
-    return _sampleMachines;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    _machinesSubscription = _machineService.getMachinesStream().listen(
+      (machines) {
+        if (mounted) {
+          setState(() {
+            _allMachines = machines;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+      },
+      onError: (error) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = error.toString();
+          });
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
-    _machinesSub?.cancel();
+    _machinesSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _refreshMachines() async {
-    setState(() => _isLoading = true);
+    if (!_machineService.isAvailable) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      return;
+    }
     try {
       final machines = await _machineService.getMachines();
-      if (mounted && machines.isNotEmpty) {
+      if (mounted) {
         setState(() {
-          _firestoreMachines = machines;
+          _allMachines = machines;
+          _errorMessage = null;
         });
       }
-    } catch (_) {
-      // Quiet fallback preserves existing state
-    }
-    if (mounted) {
-      setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppTheme.statusBreakdown,
+          ),
+        );
+      }
     }
   }
 
@@ -150,7 +124,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
       _sortBy != 'Name';
 
   List<Machine> get _filteredMachines {
-    final list = _currentMachines.where((m) {
+    final list = _allMachines.where((m) {
       final matchesStatus = _selectedFilter == 'All' ||
           m.status.toLowerCase() == _selectedFilter.toLowerCase();
       final matchesZone = _selectedZone == 'All Zones' ||
@@ -160,7 +134,8 @@ class _MachinesScreenState extends State<MachinesScreen> {
           m.name.toLowerCase().contains(query) ||
           m.code.toLowerCase().contains(query) ||
           m.location.toLowerCase().contains(query) ||
-          (m.assignedTech?.toLowerCase().contains(query) ?? false);
+          (m.assignedTech?.toLowerCase().contains(query) ?? false) ||
+          (m.model?.toLowerCase().contains(query) ?? false);
       return matchesStatus && matchesZone && matchesSearch;
     }).toList();
 
@@ -184,26 +159,21 @@ class _MachinesScreenState extends State<MachinesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (BuildContext ctx) {
+      builder: (ctx) {
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
+          builder: (context, setModalState) {
             return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               decoration: const BoxDecoration(
                 color: AppTheme.surfaceWhite,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
+              child: SafeArea(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Sheet Header Drag Handle
+                    // Handle Bar
                     Center(
                       child: Container(
                         width: 40,
@@ -216,12 +186,12 @@ class _MachinesScreenState extends State<MachinesScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Sheet Title
+                    // Title & Reset Header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Filter & Sort Fleet',
+                          'Filter & Sort Machines',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -239,9 +209,9 @@ class _MachinesScreenState extends State<MachinesScreen> {
                           child: const Text(
                             'Reset All',
                             style: TextStyle(
-                              color: AppTheme.statusBreakdown,
-                              fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.secondaryBlue,
                             ),
                           ),
                         ),
@@ -491,7 +461,7 @@ class _MachinesScreenState extends State<MachinesScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Showing ${filteredList.length} of ${_currentMachines.length} machines',
+                      'Showing ${filteredList.length} of ${_allMachines.length} machines',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -514,41 +484,43 @@ class _MachinesScreenState extends State<MachinesScreen> {
               ),
             const SizedBox(height: 4),
 
-            // Machine Cards List View / Loading / Empty State
+            // Machine Cards List View / Loading / Error / Empty State
             Expanded(
               child: _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(color: AppTheme.primaryBlue),
                     )
-                  : RefreshIndicator(
-                      onRefresh: _refreshMachines,
-                      color: AppTheme.primaryBlue,
-                      child: filteredList.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                              itemCount: filteredList.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final item = filteredList[index];
-                                return MachineCard(
-                                  id: item.id,
-                                  name: item.name,
-                                  code: item.code,
-                                  location: item.location,
-                                  status: item.status,
-                                  lastInspected: item.displayLastInspected,
-                                  onTap: () {
-                                    Navigator.pushNamed(
-                                      context,
-                                      AppRoutes.machineDetails,
-                                      arguments: item.toMap()..['id'] = item.id,
+                  : _errorMessage != null && _allMachines.isEmpty
+                      ? _buildErrorState()
+                      : RefreshIndicator(
+                          onRefresh: _refreshMachines,
+                          color: AppTheme.primaryBlue,
+                          child: filteredList.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                                  itemCount: filteredList.length,
+                                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final item = filteredList[index];
+                                    return MachineCard(
+                                      id: item.id,
+                                      name: item.name,
+                                      code: item.code,
+                                      location: item.location,
+                                      status: item.status,
+                                      lastInspected: item.formattedLastInspected,
+                                      onTap: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          AppRoutes.machineDetails,
+                                          arguments: item.toRouteMap(),
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
-                            ),
-                    ),
+                                ),
+                        ),
             ),
           ],
         ),
@@ -556,7 +528,63 @@ class _MachinesScreenState extends State<MachinesScreen> {
     );
   }
 
+  Widget _buildErrorState() {
+    return ListView(
+      padding: const EdgeInsets.all(32.0),
+      children: [
+        const SizedBox(height: 40),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.statusBreakdown.withAlpha(20),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.error_outline_rounded,
+              size: 56,
+              color: AppTheme.statusBreakdown,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Failed to Load Machines',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _errorMessage ?? 'An error occurred while connecting to Firestore.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: SizedBox(
+            width: 160,
+            child: CustomButton(
+              text: 'Retry',
+              icon: Icons.refresh_rounded,
+              onPressed: _subscribeToMachines,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEmptyState() {
+    final bool isSearchOrFilterActive = _hasActiveFilters;
+
     return ListView(
       padding: const EdgeInsets.all(32.0),
       children: [
@@ -568,18 +596,20 @@ class _MachinesScreenState extends State<MachinesScreen> {
               color: AppTheme.primaryBlue.withAlpha(12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.search_off_rounded,
+            child: Icon(
+              isSearchOrFilterActive
+                  ? Icons.search_off_rounded
+                  : Icons.precision_manufacturing_outlined,
               size: 56,
               color: AppTheme.primaryBlue,
             ),
           ),
         ),
         const SizedBox(height: 20),
-        const Text(
-          'No Machines Found',
+        Text(
+          isSearchOrFilterActive ? 'No Machines Found' : 'No Machines Registered',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
@@ -587,26 +617,31 @@ class _MachinesScreenState extends State<MachinesScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          _searchQuery.isNotEmpty
-              ? 'No machines matched "$_searchQuery". Try checking the name, code, or active status filter.'
-              : 'No machines match the selected status "$_selectedFilter".',
+          isSearchOrFilterActive
+              ? (_searchQuery.isNotEmpty
+                  ? 'No machines matched "$_searchQuery". Try checking the name, code, or active status filter.'
+                  : 'No machines match the selected status "$_selectedFilter".')
+              : 'There are no machines currently registered in Firestore inventory.',
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 13,
             color: AppTheme.textSecondary,
+            height: 1.4,
           ),
         ),
-        const SizedBox(height: 20),
-        Center(
-          child: SizedBox(
-            width: 160,
-            child: CustomButton(
-              text: 'Clear Filters',
-              isOutlined: true,
-              onPressed: _resetSearchAndFilters,
+        const SizedBox(height: 24),
+        if (isSearchOrFilterActive)
+          Center(
+            child: SizedBox(
+              width: 200,
+              child: CustomButton(
+                text: 'Reset Filters & Search',
+                isOutlined: true,
+                icon: Icons.refresh_rounded,
+                onPressed: _resetSearchAndFilters,
+              ),
             ),
           ),
-        ),
       ],
     );
   }

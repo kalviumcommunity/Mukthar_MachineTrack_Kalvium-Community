@@ -28,53 +28,57 @@ class Machine {
     this.installationDate,
   });
 
-  /// Formats a [DateTime] into a friendly relative time string (e.g. "25 mins ago").
-  static String formatRelativeTime(DateTime dateTime, {DateTime? now}) {
-    final current = now ?? DateTime.now();
-    final difference = current.difference(dateTime);
+  /// Formats a [DateTime] into a friendly relative time string (e.g., "25 mins ago").
+  static String formatRelativeTime(DateTime dateTime, {DateTime? clock}) {
+    final now = clock ?? DateTime.now();
+    final difference = now.difference(dateTime);
 
     if (difference.isNegative || difference.inSeconds < 60) {
       return 'Just now';
     } else if (difference.inMinutes < 60) {
       final mins = difference.inMinutes;
-      return mins == 1 ? '1 min ago' : '$mins mins ago';
+      return '$mins ${mins == 1 ? 'min' : 'mins'} ago';
     } else if (difference.inHours < 24) {
       final hours = difference.inHours;
-      return hours == 1 ? '1 hour ago' : '$hours hours ago';
+      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
     } else if (difference.inDays == 1) {
       return 'Yesterday';
     } else if (difference.inDays < 7) {
       return '${difference.inDays} days ago';
-    } else if (difference.inDays < 30) {
-      final weeks = (difference.inDays / 7).floor();
-      return weeks == 1 ? '1 week ago' : '$weeks weeks ago';
     } else {
-      final months = (difference.inDays / 30).floor();
-      return months == 1 ? '1 month ago' : '$months months ago';
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dateTime.day} ${months[dateTime.month - 1]} ${dateTime.year}';
     }
   }
 
-  /// Returns the relative time string computed from [lastInspectedAt],
-  /// or falls back to the static [lastInspected] string if available.
-  String get displayLastInspected {
+  /// Returns the display text for last inspection, prioritizing formatted [lastInspectedAt].
+  String? get formattedLastInspected {
     if (lastInspectedAt != null) {
       return formatRelativeTime(lastInspectedAt!);
     }
-    return lastInspected ?? 'Never';
+    return lastInspected;
   }
 
-  /// Helper to safely parse dynamic timestamp / DateTime / string / int.
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-    if (value is String) return DateTime.tryParse(value);
-    return null;
-  }
+  /// Returns a non-null display value for last inspection.
+  String get displayLastInspected => formattedLastInspected ?? 'Never';
 
   /// Factory constructor to parse data from a Map.
   factory Machine.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    DateTime? parsedLastInspectedAt;
+    final rawTimestamp = map['lastInspectedAt'];
+    if (rawTimestamp is Timestamp) {
+      parsedLastInspectedAt = rawTimestamp.toDate();
+    } else if (rawTimestamp is DateTime) {
+      parsedLastInspectedAt = rawTimestamp;
+    } else if (rawTimestamp is String && rawTimestamp.isNotEmpty) {
+      parsedLastInspectedAt = DateTime.tryParse(rawTimestamp);
+    } else if (rawTimestamp is int) {
+      parsedLastInspectedAt = DateTime.fromMillisecondsSinceEpoch(rawTimestamp);
+    }
+
     return Machine(
       id: id.isNotEmpty ? id : (map['id']?.toString() ?? ''),
       name: map['name']?.toString() ?? '',
@@ -82,7 +86,7 @@ class Machine {
       location: map['location']?.toString() ?? '',
       status: map['status']?.toString() ?? 'Idle',
       lastInspected: map['lastInspected']?.toString(),
-      lastInspectedAt: _parseDateTime(map['lastInspectedAt']),
+      lastInspectedAt: parsedLastInspectedAt,
       model: map['model']?.toString(),
       serialNumber: map['serialNumber']?.toString(),
       assignedTech: map['assignedTech']?.toString(),
@@ -105,6 +109,23 @@ class Machine {
       'status': status,
       if (lastInspected != null) 'lastInspected': lastInspected,
       if (lastInspectedAt != null) 'lastInspectedAt': Timestamp.fromDate(lastInspectedAt!),
+      if (model != null) 'model': model,
+      if (serialNumber != null) 'serialNumber': serialNumber,
+      if (assignedTech != null) 'assignedTech': assignedTech,
+      if (installationDate != null) 'installationDate': installationDate,
+    };
+  }
+
+  /// Converts the Machine instance into a Map for route arguments.
+  Map<String, dynamic> toRouteMap() {
+    return {
+      'id': id,
+      'name': name,
+      'code': code,
+      'location': location,
+      'status': status,
+      if (formattedLastInspected != null) 'lastInspected': formattedLastInspected,
+      if (lastInspectedAt != null) 'lastInspectedAt': lastInspectedAt!.toIso8601String(),
       if (model != null) 'model': model,
       if (serialNumber != null) 'serialNumber': serialNumber,
       if (assignedTech != null) 'assignedTech': assignedTech,
@@ -174,6 +195,6 @@ class Machine {
 
   @override
   String toString() {
-    return 'Machine(id: $id, name: $name, code: $code, location: $location, status: $status, lastInspectedAt: $lastInspectedAt)';
+    return 'Machine(id: $id, name: $name, code: $code, location: $location, status: $status)';
   }
 }
